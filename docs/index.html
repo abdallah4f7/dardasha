@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>دردشة · Chat</title>
+<meta name="description" content="تطبيق دردشة: رسائل، مكالمات، ملصقات وقروبات">
+<link rel="icon" href="icon.png">
+<style>
+  :root {
+    --bg: #f6f7fb; --card: #ffffff; --text: #151829; --muted: #5d6275;
+    --brand: #4f6bed; --brand-2: #3c48c8; --line: #e3e5ee;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0e1222; --card: #171c31; --text: #eef0f8; --muted: #a2a8bd; --line: #262c45; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Tahoma, "Noto Sans Arabic", sans-serif;
+    display: flex; align-items: center; justify-content: center; padding: 24px 16px;
+  }
+  main { width: 100%; max-width: 440px; text-align: center; }
+  .logo { width: 112px; height: 112px; border-radius: 28px; box-shadow: 0 12px 32px rgba(79,107,237,.35); }
+  h1 { font-size: 2.2rem; margin: 18px 0 4px; }
+  .tag { color: var(--muted); margin: 0 0 28px; font-size: 1.05rem; }
+  .btn {
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    width: 100%; padding: 16px; border-radius: 16px; text-decoration: none;
+    background: linear-gradient(135deg, var(--brand), var(--brand-2)); color: #fff;
+    font-size: 1.15rem; font-weight: 700; box-shadow: 0 8px 22px rgba(79,107,237,.35);
+  }
+  .btn:active { transform: scale(.98); }
+  .btn svg { width: 24px; height: 24px; fill: currentColor; }
+  .meta { color: var(--muted); font-size: .9rem; margin: 10px 0 0; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 18px;
+    padding: 18px 20px; margin-top: 28px; text-align: start;
+  }
+  .card h2 { font-size: 1rem; margin: 0 0 10px; }
+  .card ol, .card ul { margin: 0; padding-inline-start: 20px; color: var(--muted); line-height: 1.8; }
+  .lang { margin-top: 22px; background: none; border: 0; color: var(--brand); font: inherit; cursor: pointer; }
+  [data-lang="en"] .ar, [data-lang="ar"] .en { display: none; }
+</style>
+</head>
+<body data-lang="ar">
+<main>
+  <img class="logo" src="icon.png" alt="">
+  <h1><span class="ar">دردشة</span><span class="en">Chat</span></h1>
+  <p class="tag">
+    <span class="ar">رسائل، مكالمات صوت وفيديو، ملصقات وقروبات</span>
+    <span class="en">Messages, voice &amp; video calls, stickers and groups</span>
+  </p>
+
+  <a class="btn" href="https://github.com/abdallah4f7/dardasha/releases/latest/download/Dardasha.apk">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16l-5-5h3V4h4v7h3l-5 5zm-7 2h14v2H5v-2z"/></svg>
+    <span class="ar">تحميل لأندرويد</span><span class="en">Download for Android</span>
+  </a>
+  <p class="meta"><span class="ar">ملف APK · أندرويد 7 وأحدث</span><span class="en">APK file · Android 7 or newer</span></p>
+
+  <section class="card">
+    <h2><span class="ar">طريقة التثبيت</span><span class="en">How to install</span></h2>
+    <ol class="ar">
+      <li>اضغط «تحميل لأندرويد».</li>
+      <li>افتح الملف بعد ما يخلص التحميل.</li>
+      <li>إذا طلب منك الجوال، اسمح بالتثبيت من هذا المصدر.</li>
+      <li>اضغط «تثبيت» وافتح التطبيق.</li>
+    </ol>
+    <ol class="en">
+      <li>Tap “Download for Android”.</li>
+      <li>Open the file when the download finishes.</li>
+      <li>If your phone asks, allow installing from this source.</li>
+      <li>Tap “Install” and open the app.</li>
+    </ol>
+  </section>
+
+  <section class="card">
+    <h2><span class="ar">المميزات</span><span class="en">Features</span></h2>
+    <ul class="ar">
+      <li>محادثات فردية وقروبات</li>
+      <li>صور ومقاطع ورسائل صوتية</li>
+      <li>ملصقات تسويها بنفسك</li>
+      <li>روابط يوتيوب وتيك توك وسناب تشتغل داخل التطبيق</li>
+      <li>تفاعل بالإيموجي والرد على الرسائل</li>
+      <li>إضافة أصدقاء</li>
+    </ul>
+    <ul class="en">
+      <li>One-to-one and group chats</li>
+      <li>Photos, videos and voice messages</li>
+      <li>Make your own stickers</li>
+      <li>YouTube, TikTok and Snapchat links play inside the app</li>
+      <li>Emoji reactions and replies</li>
+      <li>Add friends</li>
+    </ul>
+  </section>
+
+  <button class="lang" id="lang" type="button">English</button>
+</main>
+<script>
+  const body = document.body, btn = document.getElementById('lang');
+  function setLang(l) {
+    body.dataset.lang = l;
+    document.documentElement.lang = l;
+    document.documentElement.dir = l === 'ar' ? 'rtl' : 'ltr';
+    document.title = l === 'ar' ? 'دردشة' : 'Chat';
+    btn.textContent = l === 'ar' ? 'English' : 'العربية';
+  }
+  setLang((navigator.language || 'ar').toLowerCase().startsWith('ar') ? 'ar' : 'en');
+  btn.addEventListener('click', () => setLang(body.dataset.lang === 'ar' ? 'en' : 'ar'));
+</script>
+</body>
+</html>
