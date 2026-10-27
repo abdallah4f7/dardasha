@@ -1,7 +1,11 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../config.dart';
 import '../l10n.dart';
 import '../services/api.dart';
 import '../widgets/common.dart';
@@ -30,15 +34,33 @@ class _AuthPageState extends State<AuthPage> {
   final _password = TextEditingController();
   late bool _register = widget.startOnRegister;
   bool _busy = false;
+  Set<String> _providers = {};
 
   @override
   void initState() {
     super.initState();
+    _loadProviders();
     if (widget.notice != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) toast(context, L.of(context).t(widget.notice!));
       });
     }
+  }
+
+  /// Only show social buttons for providers switched on in Supabase, so they
+  /// appear by themselves once Google / Apple are configured.
+  Future<void> _loadProviders() async {
+    try {
+      final r = await http
+          .get(Uri.parse('$supabaseUrl/auth/v1/settings'), headers: {'apikey': supabasePublishableKey})
+          .timeout(const Duration(seconds: 8));
+      final external = (jsonDecode(r.body) as Map<String, dynamic>)['external'] as Map<String, dynamic>? ?? {};
+      final on = {
+        for (final p in ['google', 'apple'])
+          if (external[p] == true) p,
+      };
+      if (mounted) setState(() => _providers = on);
+    } catch (_) {}
   }
 
   Future<void> _setIntent(String intent) async =>
@@ -122,34 +144,41 @@ class _AuthPageState extends State<AuthPage> {
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(color: scheme.onSurfaceVariant),
                     ),
                     const SizedBox(height: 28),
-                    _SocialButton(
-                      label: '${l.t('continueWith')} Google',
-                      icon: const _GoogleLogo(),
-                      background: Colors.white,
-                      foreground: Colors.black87,
-                      border: dark ? null : scheme.outlineVariant,
-                      onPressed: _busy ? null : () => _oauth(OAuthProvider.google),
-                    ),
-                    const SizedBox(height: 10),
-                    _SocialButton(
-                      label: '${l.t('continueWith')} Apple',
-                      icon: Icon(Icons.apple, size: 26, color: dark ? Colors.black : Colors.white),
-                      background: dark ? Colors.white : Colors.black,
-                      foreground: dark ? Colors.black : Colors.white,
-                      onPressed: _busy ? null : () => _oauth(OAuthProvider.apple),
-                    ),
-                    const SizedBox(height: 20),
-                    Row(
-                      children: [
-                        const Expanded(child: Divider()),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          child: Text(l.t('or'), style: TextStyle(color: scheme.onSurfaceVariant)),
-                        ),
-                        const Expanded(child: Divider()),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
+                    if (_providers.contains('google')) ...[
+                      _SocialButton(
+                        label: '${l.t('continueWith')} Google',
+                        icon: const _GoogleLogo(),
+                        background: Colors.white,
+                        foreground: Colors.black87,
+                        border: dark ? null : scheme.outlineVariant,
+                        onPressed: _busy ? null : () => _oauth(OAuthProvider.google),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+                    if (_providers.contains('apple')) ...[
+                      _SocialButton(
+                        label: '${l.t('continueWith')} Apple',
+                        icon: Icon(Icons.apple, size: 26, color: dark ? Colors.black : Colors.white),
+                        background: dark ? Colors.white : Colors.black,
+                        foreground: dark ? Colors.black : Colors.white,
+                        onPressed: _busy ? null : () => _oauth(OAuthProvider.apple),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+                    if (_providers.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          const Expanded(child: Divider()),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: Text(l.t('or'), style: TextStyle(color: scheme.onSurfaceVariant)),
+                          ),
+                          const Expanded(child: Divider()),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                    ],
                     TextFormField(
                       controller: _email,
                       keyboardType: TextInputType.emailAddress,
