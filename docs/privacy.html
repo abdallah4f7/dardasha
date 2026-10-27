@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>سياسة الخصوصية · دردشة</title>
+<meta name="description" content="سياسة الخصوصية لتطبيق دردشة">
+<link rel="icon" href="icon.png">
+<style>
+  :root {
+    --bg: #f6f7fb; --card: #ffffff; --text: #151829; --muted: #5d6275;
+    --brand: #4f6bed; --brand-2: #3c48c8; --line: #e3e5ee;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0e1222; --card: #171c31; --text: #eef0f8; --muted: #a2a8bd; --line: #262c45; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Tahoma, "Noto Sans Arabic", sans-serif;
+    padding: 24px 16px;
+  }
+  main { width: 100%; max-width: 640px; margin: 0 auto; }
+  header { display: flex; align-items: center; gap: 14px; }
+  .logo { width: 56px; height: 56px; border-radius: 14px; }
+  h1 { font-size: 1.6rem; margin: 0; }
+  .meta { color: var(--muted); font-size: .9rem; margin: 4px 0 0; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 18px;
+    padding: 18px 20px; margin-top: 18px;
+  }
+  .card h2 { font-size: 1.05rem; margin: 0 0 10px; }
+  .card p, .card ul { margin: 0; color: var(--muted); line-height: 1.8; }
+  .card ul { padding-inline-start: 20px; }
+  a { color: var(--brand); }
+  .row { display: flex; justify-content: space-between; align-items: center; margin-top: 22px; }
+  .lang { background: none; border: 0; color: var(--brand); font: inherit; cursor: pointer; padding: 0; }
+  [data-lang="en"] .ar, [data-lang="ar"] .en { display: none; }
+</style>
+</head>
+<body data-lang="ar">
+<main>
+  <header>
+    <img class="logo" src="icon.png" alt="">
+    <div>
+      <h1><span class="ar">سياسة الخصوصية</span><span class="en">Privacy Policy</span></h1>
+      <p class="meta"><span class="ar">آخر تحديث: ٢٧ أكتوبر ٢٠٢٦</span><span class="en">Last updated: October 27, 2026</span></p>
+    </div>
+  </header>
+
+  <section class="card">
+    <h2><span class="ar">وش نجمع</span><span class="en">What we collect</span></h2>
+    <ul class="ar">
+      <li>بيانات الحساب: الإيميل، اسم المستخدم، والاسم الظاهر.</li>
+      <li>إذا سجلت بـ Google أو Apple: نستلم منهم إيميلك واسمك بس.</li>
+      <li>المحتوى اللي ترسله: الرسائل، الصور، المقاطع، الرسائل الصوتية، والملصقات.</li>
+      <li>قائمة أصدقائك والقروبات اللي أنت فيها.</li>
+    </ul>
+    <ul class="en">
+      <li>Account details: email, username and display name.</li>
+      <li>If you sign in with Google or Apple, we receive only your email and name from them.</li>
+      <li>Content you send: messages, photos, videos, voice messages and stickers.</li>
+      <li>Your friends list and the groups you belong to.</li>
+    </ul>
+  </section>
+
+  <section class="card">
+    <h2><span class="ar">كيف نستخدمها</span><span class="en">How we use it</span></h2>
+    <p class="ar">نستخدم بياناتك عشان نشغّل التطبيق بس: تسجيل دخولك، وتوصيل رسائلك للناس اللي ترسل لهم. ما نبيع بياناتك، وما نستخدمها للإعلانات، وما نشاركها مع أحد.</p>
+    <p class="en">We use your data only to run the app: signing you in and delivering your messages to the people you send them to. We do not sell your data, use it for advertising, or share it with anyone.</p>
+  </section>
+
+  <section class="card">
+    <h2><span class="ar">وين تنحفظ</span><span class="en">Where it is stored</span></h2>
+    <p class="ar">البيانات محفوظة على خوادم <a href="https://supabase.com/privacy">Supabase</a>. الرسائل ما يقدر يقراها إلا أعضاء المحادثة. الصور والمقاطع والصوتيات تنحفظ بروابط، وأي أحد عنده الرابط يقدر يفتحها. المكالمات تمر مباشرة بين الجهازين وما تنسجل.</p>
+    <p class="en">Data is stored on <a href="https://supabase.com/privacy">Supabase</a> servers. Messages can be read only by members of the conversation. Photos, videos and voice messages are stored behind links that anyone with the link can open. Calls go directly between the two devices and are not recorded.</p>
+  </section>
+
+  <section class="card">
+    <h2><span class="ar">حذف بياناتك</span><span class="en">Deleting your data</span></h2>
+    <p class="ar">تقدر تحذف أي رسالة أرسلتها من داخل التطبيق. ولو تبي نحذف حسابك وكل بياناتك، راسلنا على الإيميل اللي تحت.</p>
+    <p class="en">You can delete any message you sent from inside the app. To delete your account and all your data, email us at the address below.</p>
+  </section>
+
+  <section class="card">
+    <h2><span class="ar">تواصل معنا</span><span class="en">Contact</span></h2>
+    <p><a href="mailto:abodi.amjad.almobarak@gmail.com">abodi.amjad.almobarak@gmail.com</a></p>
+  </section>
+
+  <div class="row">
+    <a href="./"><span class="ar">← الرجوع لصفحة التحميل</span><span class="en">← Back to download page</span></a>
+    <button class="lang" id="lang" type="button">English</button>
+  </div>
+</main>
+<script>
+  const body = document.body, btn = document.getElementById('lang');
+  function setLang(l) {
+    body.dataset.lang = l;
+    document.documentElement.lang = l;
+    document.documentElement.dir = l === 'ar' ? 'rtl' : 'ltr';
+    document.title = l === 'ar' ? 'سياسة الخصوصية · دردشة' : 'Privacy Policy · Chat';
+    btn.textContent = l === 'ar' ? 'English' : 'العربية';
+  }
+  setLang((navigator.language || 'ar').toLowerCase().startsWith('ar') ? 'ar' : 'en');
+  btn.addEventListener('click', () => setLang(body.dataset.lang === 'ar' ? 'en' : 'ar'));
+</script>
+</body>
+</html>

@@ -54,20 +54,20 @@
 
   <a class="btn" href="https://github.com/abdallah4f7/dardasha/releases/latest/download/Dardasha.apk">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16l-5-5h3V4h4v7h3l-5 5zm-7 2h14v2H5v-2z"/></svg>
-    <span class="ar">تحميل لأندرويد</span><span class="en">Download for Android</span>
+    <span class="ar">تحميل</span><span class="en">Download</span>
   </a>
-  <p class="meta"><span class="ar">ملف APK · أندرويد 7 وأحدث</span><span class="en">APK file · Android 7 or newer</span></p>
+  <p class="meta"><span class="ar">الإصدار <span class="ver">1.0.1</span></span><span class="en">Version <span class="ver">1.0.1</span></span></p>
 
   <section class="card">
     <h2><span class="ar">طريقة التثبيت</span><span class="en">How to install</span></h2>
     <ol class="ar">
-      <li>اضغط «تحميل لأندرويد».</li>
+      <li>اضغط «تحميل».</li>
       <li>افتح الملف بعد ما يخلص التحميل.</li>
       <li>إذا طلب منك الجوال، اسمح بالتثبيت من هذا المصدر.</li>
       <li>اضغط «تثبيت» وافتح التطبيق.</li>
     </ol>
     <ol class="en">
-      <li>Tap “Download for Android”.</li>
+      <li>Tap “Download”.</li>
       <li>Open the file when the download finishes.</li>
       <li>If your phone asks, allow installing from this source.</li>
       <li>Tap “Install” and open the app.</li>
@@ -95,6 +95,7 @@
   </section>
 
   <button class="lang" id="lang" type="button">English</button>
+  <p class="meta"><a href="privacy.html" style="color: inherit"><span class="ar">سياسة الخصوصية</span><span class="en">Privacy Policy</span></a></p>
 </main>
 <script>
   const body = document.body, btn = document.getElementById('lang');
@@ -107,6 +108,10 @@
   }
   setLang((navigator.language || 'ar').toLowerCase().startsWith('ar') ? 'ar' : 'en');
   btn.addEventListener('click', () => setLang(body.dataset.lang === 'ar' ? 'en' : 'ar'));
+  fetch('https://api.github.com/repos/abdallah4f7/dardasha/releases/latest')
+    .then(r => r.json())
+    .then(r => { if (r.tag_name) document.querySelectorAll('.ver').forEach(e => e.textContent = r.tag_name.replace(/^v/, '')); })
+    .catch(() => {});
 </script>
 </body>
 </html>
