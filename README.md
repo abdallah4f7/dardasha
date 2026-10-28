@@ -10,7 +10,7 @@
 - ملصقات: تسوي ملصق من صورة (قص وشكل ونص)، وتحفظ أي ملصق يوصلك (بالضغط عليه مطولاً)، وفيه بعد ملصقات إيموجي
 - روابط يوتيوب وتيك توك وسناب وإنستقرام وغيرها تطلع بصورة المقطع، وتضغطها يشتغل المقطع داخل التطبيق
 - مكالمات صوت وفيديو (في المحادثات الفردية)
-- تسجيل دخول بـ Google و Apple، أو بالإيميل وكلمة المرور
+- تسجيل دخول بـ Google، أو بالإيميل وكلمة المرور
 - الضغط المطوّل على أي رسالة يطلع لك: تفاعل بإيموجي، رد، تنزيل (الصور والمقاطع والملصقات تنحفظ في الاستوديو)، نسخ، حذف
 - الأصدقاء: تضيف أحد باسم المستخدم، وتقبل الطلبات أو ترفضها
 - الواجهة عربي أو إنجليزي حسب لغة الجوال، وتدعم الوضع الليلي
@@ -27,17 +27,16 @@
 3. من **Authentication → Sign In / Providers → Email** طفِّ خيار **Confirm email**، عشان الحساب يشتغل على طول بدون تأكيد إيميل.
 4. من **Project Settings → API Keys** انسخ **Project URL** و **Publishable key** وحطهم في [lib/config.dart](lib/config.dart).
 
-### 3) تسجيل الدخول بـ Google و Apple
+### 3) تسجيل الدخول بـ Google
 1. في Supabase من **Authentication → URL Configuration → Redirect URLs** أضف:
    `com.dardasha.chat://login-callback`
-2. من **Authentication → Sign In / Providers** فعّل اللي تبغاه، وحط بياناته:
+2. من **Authentication → Sign In / Providers** فعّل Google، وحط بياناته:
    - **Google**: من [Google Cloud Console](https://console.cloud.google.com/apis/credentials) سوّ OAuth Client من نوع **Web application**، وحط في Authorized redirect URIs الرابط اللي يعطيك إياه Supabase (ينتهي بـ `/auth/v1/callback`). بعدين انسخ Client ID و Secret لـ Supabase.
-   - **Apple**: يحتاج حساب Apple Developer (99$ بالسنة). الخطوات موجودة في [شرح Supabase](https://supabase.com/docs/guides/auth/social-login/auth-apple).
-3. الزر اللي ما فعّلته يطلع لك خطأ إذا ضغطته، والتسجيل بالإيميل يشتغل بدون أي إعداد.
+3. إذا ما فعّلت Google ما يطلع زره، والتسجيل بالإيميل يشتغل بدون أي إعداد.
 
 **كيف يمشي التسجيل:**
-- **إنشاء حساب** (بالإيميل أو Google أو Apple): بعدها تطلع صفحة تختار فيها اسم المستخدم والاسم الظاهر.
-- **تسجيل الدخول** بـ Google أو Apple بإيميل ما له حساب: يرجعك لصفحة إنشاء الحساب.
+- **إنشاء حساب** (بالإيميل أو Google): بعدها تطلع صفحة تختار فيها اسم المستخدم والاسم الظاهر.
+- **تسجيل الدخول** بـ Google بإيميل ما له حساب: يرجعك لصفحة إنشاء الحساب.
 
 ### 4) الأيقونة
 حط صورة الأيقونة بدل `assets/icon/icon.png` (مربعة، ويفضل 1024×1024)، وبعدين شغّل:

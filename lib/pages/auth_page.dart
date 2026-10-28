@@ -47,8 +47,7 @@ class _AuthPageState extends State<AuthPage> {
     }
   }
 
-  /// Only show social buttons for providers switched on in Supabase, so they
-  /// appear by themselves once Google / Apple are configured.
+  /// Only show the Google button when it is switched on in Supabase.
   Future<void> _loadProviders() async {
     try {
       final r = await http
@@ -56,7 +55,7 @@ class _AuthPageState extends State<AuthPage> {
           .timeout(const Duration(seconds: 8));
       final external = (jsonDecode(r.body) as Map<String, dynamic>)['external'] as Map<String, dynamic>? ?? {};
       final on = {
-        for (final p in ['google', 'apple'])
+        for (final p in ['google'])
           if (external[p] == true) p,
       };
       if (mounted) setState(() => _providers = on);
@@ -152,16 +151,6 @@ class _AuthPageState extends State<AuthPage> {
                         foreground: Colors.black87,
                         border: dark ? null : scheme.outlineVariant,
                         onPressed: _busy ? null : () => _oauth(OAuthProvider.google),
-                      ),
-                      const SizedBox(height: 10),
-                    ],
-                    if (_providers.contains('apple')) ...[
-                      _SocialButton(
-                        label: '${l.t('continueWith')} Apple',
-                        icon: Icon(Icons.apple, size: 26, color: dark ? Colors.black : Colors.white),
-                        background: dark ? Colors.white : Colors.black,
-                        foreground: dark ? Colors.black : Colors.white,
-                        onPressed: _busy ? null : () => _oauth(OAuthProvider.apple),
                       ),
                       const SizedBox(height: 10),
                     ],

@@ -28,7 +28,7 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
   @override
   void initState() {
     super.initState();
-    // Prefill from Google / Apple when available.
+    // Prefill from Google when available.
     final meta = db.auth.currentUser?.userMetadata ?? {};
     _name.text = (meta['full_name'] ?? meta['name'] ?? meta['global_name'] ?? '') as String;
     _avatarUrl = (meta['avatar_url'] ?? meta['picture']) as String?;
