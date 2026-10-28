@@ -1,8 +1,10 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../l10n.dart';
 import '../models.dart';
@@ -389,8 +391,14 @@ class _ReplyQuote extends StatelessWidget {
   }
 }
 
-void openLink(BuildContext context, LinkPreview p) =>
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => WebVideoPage(preview: p)));
+/// Plays videos in-app; on the web build there is no WebView, so it opens a new tab.
+void openLink(BuildContext context, LinkPreview p) {
+  if (kIsWeb) {
+    launchUrl(Uri.parse(p.url), webOnlyWindowName: '_blank');
+    return;
+  }
+  Navigator.of(context).push(MaterialPageRoute(builder: (_) => WebVideoPage(preview: p)));
+}
 
 class _TextContent extends StatefulWidget {
   const _TextContent({required this.message, required this.color, required this.mine});

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
@@ -119,6 +120,8 @@ enum CallState { ringing, connecting, connected, ended }
 /// Keeps Android's screen capture alive (it needs a foreground service).
 const _screenService = MethodChannel('dardasha/screen');
 
+bool get _isAndroid => !kIsWeb && Platform.isAndroid;
+
 class CallSession extends ChangeNotifier {
   CallSession({
     required this.callId,
@@ -152,6 +155,9 @@ class CallSession extends ChangeNotifier {
   final localRenderer = RTCVideoRenderer();
   final remoteRenderer = RTCVideoRenderer();
 
+  /// Browsers only play remote audio through an element; phones play it by themselves.
+  final _remoteAudio = RTCVideoRenderer();
+
   RTCPeerConnection? _pc;
   MediaStream? _local; // microphone
   MediaStream? _camera;
@@ -178,6 +184,7 @@ class CallSession extends ChangeNotifier {
   Future<void> _setup() async {
     await localRenderer.initialize();
     await remoteRenderer.initialize();
+    if (kIsWeb) await _remoteAudio.initialize();
     _local = await navigator.mediaDevices.getUserMedia({'audio': true, 'video': false});
     if (video) {
       _camera = await navigator.mediaDevices.getUserMedia({
@@ -197,7 +204,10 @@ class CallSession extends ChangeNotifier {
       _svc.send(peer.id, {'type': 'candidate', 'callId': callId, 'candidate': c.toMap()});
     };
     pc.onTrack = (e) async {
-      if (e.track.kind != 'video') return; // remote audio plays on its own
+      if (e.track.kind != 'video') {
+        if (kIsWeb && e.streams.isNotEmpty) _remoteAudio.srcObject = e.streams.first;
+        return;
+      }
       final stream = e.streams.isNotEmpty ? e.streams.first : await createLocalMediaStream('remote');
       if (e.streams.isEmpty) await stream.addTrack(e.track);
       remoteRenderer.srcObject = stream;
@@ -211,8 +221,13 @@ class CallSession extends ChangeNotifier {
         hangup();
       }
     };
-    await Helper.setSpeakerphoneOn(speaker);
+    await _applySpeaker();
     notifyListeners();
+  }
+
+  Future<void> _applySpeaker() async {
+    if (kIsWeb) return; // the browser picks the output
+    await Helper.setSpeakerphoneOn(speaker);
   }
 
   MediaStreamTrack? get _cameraTrack => _camera?.getVideoTracks().firstOrNull;
@@ -375,14 +390,16 @@ class CallSession extends ChangeNotifier {
   Future<void> switchCamera() async {
     final track = _cameraTrack;
     if (track == null) return;
-    frontCamera = await Helper.switchCamera(track);
+    try {
+      frontCamera = await Helper.switchCamera(track);
+    } catch (_) {} // some browsers have one camera or no switching
     notifyListeners();
   }
 
   Future<void> toggleScreenShare() async {
     if (_videoSender == null) return;
     if (sharingScreen) return _stopScreen();
-    if (Platform.isAndroid) {
+    if (_isAndroid) {
       if (!await Helper.requestCapturePermission()) return;
       await _screenService.invokeMethod('start');
       // The service must be in the foreground before capture begins.
@@ -404,7 +421,7 @@ class CallSession extends ChangeNotifier {
       _sendMedia();
       notifyListeners();
     } catch (_) {
-      if (Platform.isAndroid) await _screenService.invokeMethod('stop');
+      if (_isAndroid) await _screenService.invokeMethod('stop');
     }
   }
 
@@ -414,7 +431,7 @@ class CallSession extends ChangeNotifier {
     await _videoSender?.replaceTrack(null);
     await _stopStream(_screen);
     _screen = null;
-    if (Platform.isAndroid) await _screenService.invokeMethod('stop');
+    if (_isAndroid) await _screenService.invokeMethod('stop');
     if (notify) {
       _sendMedia();
       notifyListeners();
@@ -423,7 +440,7 @@ class CallSession extends ChangeNotifier {
 
   Future<void> toggleSpeaker() async {
     speaker = !speaker;
-    await Helper.setSpeakerphoneOn(speaker);
+    await _applySpeaker();
     notifyListeners();
   }
 
@@ -454,7 +471,7 @@ class CallSession extends ChangeNotifier {
   }
 
   Future<void> disposeRenderers() async {
-    for (final r in [localRenderer, remoteRenderer]) {
+    for (final r in [localRenderer, remoteRenderer, if (kIsWeb) _remoteAudio]) {
       try {
         if (r.textureId != null) r.srcObject = null;
         await r.dispose();

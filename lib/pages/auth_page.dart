@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -69,7 +70,8 @@ class _AuthPageState extends State<AuthPage> {
     setState(() => _busy = true);
     try {
       await _setIntent(_register ? 'oauth_register' : 'oauth_login');
-      await db.auth.signInWithOAuth(provider, redirectTo: authRedirect);
+      // The web build comes back to the page it was opened from.
+      await db.auth.signInWithOAuth(provider, redirectTo: kIsWeb ? Uri.base.removeFragment().toString() : authRedirect);
     } on AuthException catch (e) {
       if (mounted) toast(context, e.message);
     } catch (e) {

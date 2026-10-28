@@ -52,14 +52,31 @@
     <span class="en">Messages, voice &amp; video calls, stickers and groups</span>
   </p>
 
-  <a class="btn" href="https://github.com/abdallah4f7/dardasha/releases/latest/download/Dardasha.apk">
+  <a class="btn" id="get" href="https://github.com/abdallah4f7/dardasha/releases/latest/download/Dardasha.apk">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16l-5-5h3V4h4v7h3l-5 5zm-7 2h14v2H5v-2z"/></svg>
     <span class="ar">تحميل</span><span class="en">Download</span>
   </a>
-  <p class="meta"><span class="ar">الإصدار <span class="ver">1.0.1</span></span><span class="en">Version <span class="ver">1.0.1</span></span></p>
+  <p class="meta" id="get-meta"><span class="ar">الإصدار <span class="ver">1.0.2</span></span><span class="en">Version <span class="ver">1.0.2</span></span></p>
+  <p class="meta" id="iphone-link"><a href="#iphone" style="color: inherit"><span class="ar">عندك آيفون؟</span><span class="en">Have an iPhone?</span></a></p>
 
-  <section class="card">
-    <h2><span class="ar">طريقة التثبيت</span><span class="en">How to install</span></h2>
+  <section class="card" id="iphone">
+    <h2><span class="ar">للآيفون</span><span class="en">On iPhone</span></h2>
+    <ol class="ar">
+      <li>افتح <a href="app/">abdallah4f7.github.io/dardasha/app</a> من <b>Safari</b>.</li>
+      <li>اضغط زر المشاركة <b>⬆︎</b> تحت الشاشة.</li>
+      <li>اختر «إضافة إلى الشاشة الرئيسية» ثم «إضافة».</li>
+      <li>افتح «دردشة» من الشاشة الرئيسية مثل أي تطبيق.</li>
+    </ol>
+    <ol class="en">
+      <li>Open <a href="app/">abdallah4f7.github.io/dardasha/app</a> in <b>Safari</b>.</li>
+      <li>Tap the Share button <b>⬆︎</b> at the bottom.</li>
+      <li>Choose “Add to Home Screen”, then “Add”.</li>
+      <li>Open “Chat” from your Home Screen like any app.</li>
+    </ol>
+  </section>
+
+  <section class="card" id="android">
+    <h2><span class="ar">طريقة التثبيت على أندرويد</span><span class="en">How to install on Android</span></h2>
     <ol class="ar">
       <li>اضغط «تحميل».</li>
       <li>افتح الملف بعد ما يخلص التحميل.</li>
@@ -108,6 +125,21 @@
   }
   setLang((navigator.language || 'ar').toLowerCase().startsWith('ar') ? 'ar' : 'en');
   btn.addEventListener('click', () => setLang(body.dataset.lang === 'ar' ? 'en' : 'ar'));
+  // iPhones can't install APKs: send them to the web version instead.
+  if (/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
+    const get = document.getElementById('get');
+    get.href = 'app/';
+    get.querySelector('.ar').textContent = 'فتح التطبيق';
+    get.querySelector('.en').textContent = 'Open the app';
+    document.getElementById('get-meta').style.display = 'none';
+    document.getElementById('iphone-link').style.display = 'none';
+    document.getElementById('android').style.display = 'none';
+  } else {
+    document.getElementById('iphone').style.display = 'none';
+    document.getElementById('iphone-link').addEventListener('click', () => {
+      document.getElementById('iphone').style.display = '';
+    });
+  }
   fetch('https://api.github.com/repos/abdallah4f7/dardasha/releases/latest')
     .then(r => r.json())
     .then(r => { if (r.tag_name) document.querySelectorAll('.ver').forEach(e => e.textContent = r.tag_name.replace(/^v/, '')); })

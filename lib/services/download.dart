@@ -1,10 +1,12 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:gal/gal.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../l10n.dart';
 import '../models.dart';
@@ -15,6 +17,10 @@ import '../widgets/common.dart';
 Future<void> downloadMessage(BuildContext context, Message m) async {
   final url = m.mediaUrl;
   if (url == null) return;
+  if (kIsWeb) {
+    await launchUrl(Uri.parse(url), webOnlyWindowName: '_blank'); // the browser saves it
+    return;
+  }
   final l = L.of(context);
   toast(context, '${l.t('download')}…');
 

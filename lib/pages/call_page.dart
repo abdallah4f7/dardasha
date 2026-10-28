@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
@@ -148,11 +149,12 @@ class _CallPageState extends State<CallPage> {
                               active: s.muted,
                               onTap: s.toggleMute,
                             ),
-                            _RoundButton(
-                              icon: s.speaker ? Icons.volume_up : Icons.hearing,
-                              active: s.speaker,
-                              onTap: s.toggleSpeaker,
-                            ),
+                            if (!kIsWeb) // the browser chooses the speaker
+                              _RoundButton(
+                                icon: s.speaker ? Icons.volume_up : Icons.hearing,
+                                active: s.speaker,
+                                onTap: s.toggleSpeaker,
+                              ),
                             if (s.canShareVideo) ...[
                               _RoundButton(
                                 icon: s.cameraOn ? Icons.videocam : Icons.videocam_off,

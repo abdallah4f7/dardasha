@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:open_filex/open_filex.dart';
@@ -17,7 +18,7 @@ class Updater {
   static bool _checked = false;
 
   static Future<void> check(BuildContext context) async {
-    if (_checked || !Platform.isAndroid) return;
+    if (_checked || kIsWeb || !Platform.isAndroid) return;
     _checked = true;
     try {
       final res = await http.get(Uri.parse(_latest), headers: {'Accept': 'application/vnd.github+json'});

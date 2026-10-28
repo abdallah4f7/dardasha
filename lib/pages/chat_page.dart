@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -297,14 +298,23 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
+  /// Phones record AAC. Browsers record what they can: Safari AAC, Chrome Opus/WebM.
+  bool _recordingAac = true;
+
   Future<void> _startRecording() async {
     if (!await _recorder.hasPermission()) {
       if (mounted) toast(context, L.of(context).t('micDenied'));
       return;
     }
-    final dir = await getTemporaryDirectory();
-    final path = '${dir.path}/voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
-    await _recorder.start(const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 64000), path: path);
+    var path = '';
+    if (kIsWeb) {
+      _recordingAac = await _recorder.isEncoderSupported(AudioEncoder.aacLc);
+    } else {
+      final dir = await getTemporaryDirectory();
+      path = '${dir.path}/voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
+    }
+    final encoder = _recordingAac ? AudioEncoder.aacLc : AudioEncoder.opus;
+    await _recorder.start(RecordConfig(encoder: encoder, bitRate: 64000), path: path);
     HapticFeedback.mediumImpact();
     setState(() {
       _recording = true;
@@ -325,7 +335,9 @@ class _ChatPageState extends State<ChatPage> {
     final reply = _takeReply();
     await _guard(() async {
       final bytes = await XFile(path).readAsBytes();
-      final url = await Api.upload(bytes, 'm4a', 'audio/mp4');
+      final url = _recordingAac
+          ? await Api.upload(bytes, 'm4a', 'audio/mp4')
+          : await Api.upload(bytes, 'webm', 'audio/webm');
       await Api.send(widget.conversationId, type: 'voice', mediaUrl: url, meta: {...reply, 'ms': ms});
     });
   }
