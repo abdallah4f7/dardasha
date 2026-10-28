@@ -14,6 +14,7 @@ import '../services/api.dart';
 import '../services/download.dart';
 import '../services/link_preview.dart';
 import 'common.dart';
+import 'share_sheet.dart';
 
 const quickReactions = ['❤️', '😂', '😮', '😢', '👍', '🙏'];
 const moreReactions = [
@@ -123,6 +124,12 @@ class MessageBubble extends StatelessWidget {
                 title: Text(l.t('copy')),
                 onTap: () => Navigator.pop(c, 'copy'),
               ),
+            if (m.type != 'call')
+              ListTile(
+                leading: const Icon(Icons.share_outlined),
+                title: Text(l.t('share')),
+                onTap: () => Navigator.pop(c, 'share'),
+              ),
             if (mine && m.type == 'text')
               ListTile(
                 leading: const Icon(Icons.edit_outlined),
@@ -181,6 +188,8 @@ class MessageBubble extends StatelessWidget {
           onReply(m);
         case 'edit':
           onEdit(m);
+        case 'share':
+          await shareMessage(context, m);
         case 'download':
           await downloadMessage(context, m);
         case 'copy':

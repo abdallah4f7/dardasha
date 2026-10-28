@@ -132,6 +132,17 @@ class Api {
     await _attachPreview(m.id, text, meta);
   }
 
+  /// Sends a copy of [m] to another chat, without its reply quote or edit mark.
+  static Future<void> forward(Message m, String conversationId) => send(
+    conversationId,
+    type: m.type,
+    content: m.content,
+    mediaUrl: m.mediaUrl,
+    meta: {...m.meta}
+      ..remove('reply')
+      ..remove('edited'),
+  );
+
   static Future<void> deleteMessage(String id) => db.from('messages').delete().eq('id', id);
 
   /// One reaction per person per message; picking the same emoji again removes it.
