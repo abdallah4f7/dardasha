@@ -63,6 +63,7 @@ class MessageBubble extends StatelessWidget {
     required this.onReact,
     required this.onEdit,
     required this.onDelete,
+    this.onSenderTap,
   });
 
   final Message message;
@@ -74,6 +75,7 @@ class MessageBubble extends StatelessWidget {
   final void Function(String emoji) onReact;
   final void Function(Message) onEdit;
   final void Function(Message) onDelete;
+  final VoidCallback? onSenderTap;
 
   bool get _bare => message.type == 'sticker';
 
@@ -238,11 +240,14 @@ class MessageBubble extends StatelessWidget {
               crossAxisAlignment: mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
               children: [
                 if (senderName != null)
-                  Padding(
-                    padding: const EdgeInsetsDirectional.only(start: 12, bottom: 2),
-                    child: Text(
-                      senderName!,
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: scheme.primary),
+                  GestureDetector(
+                    onTap: onSenderTap,
+                    child: Padding(
+                      padding: const EdgeInsetsDirectional.only(start: 12, bottom: 2),
+                      child: Text(
+                        senderName!,
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: scheme.primary),
+                      ),
                     ),
                   ),
                 Container(
@@ -257,7 +262,7 @@ class MessageBubble extends StatelessWidget {
                             bottomRight: tailOnRight ? tail : r,
                           ),
                         ),
-                  clipBehavior: Clip.antiAlias,
+                  clipBehavior: _bare ? Clip.none : Clip.antiAlias, // stickers have no bubble to clip to
                   padding: padded ? const EdgeInsets.all(3) : const EdgeInsets.fromLTRB(12, 8, 12, 6),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.end,

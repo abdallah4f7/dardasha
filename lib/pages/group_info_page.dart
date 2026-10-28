@@ -6,6 +6,7 @@ import '../services/api.dart';
 import '../widgets/avatar.dart';
 import '../widgets/common.dart';
 import 'new_chat_page.dart';
+import 'user_page.dart';
 
 class GroupInfoPage extends StatefulWidget {
   const GroupInfoPage({super.key, required this.conversationId, required this.name});
@@ -74,6 +75,9 @@ class _GroupInfoPageState extends State<GroupInfoPage> {
               leading: Avatar(name: m.displayName, url: m.avatarUrl),
               title: Text(m.id == myId ? l.t('you') : m.displayName),
               subtitle: Text('@${m.username}', textDirection: TextDirection.ltr),
+              onTap: m.id == myId
+                  ? null
+                  : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => UserPage(user: m))),
             ),
           const Divider(),
           ListTile(

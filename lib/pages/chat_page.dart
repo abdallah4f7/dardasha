@@ -19,6 +19,7 @@ import '../widgets/common.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/sticker_panel.dart';
 import 'group_info_page.dart';
+import 'user_page.dart';
 
 class ChatPage extends StatefulWidget {
   const ChatPage({
@@ -135,6 +136,12 @@ class _ChatPageState extends State<ChatPage> {
     setState(() => _editing = null);
     _text.clear();
   }
+
+  void _openProfile(Profile p) => Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (_) => UserPage(user: p, fromConversationId: widget.isGroup ? null : widget.conversationId),
+    ),
+  );
 
   void _delete(Message m) {
     setState(() => _deleted.add(m.id));
@@ -365,7 +372,9 @@ class _ChatPageState extends State<ChatPage> {
                     builder: (_) => GroupInfoPage(conversationId: widget.conversationId, name: widget.title),
                   ),
                 )
-              : null,
+              : _peer == null
+              ? null
+              : () => _openProfile(_peer!),
           child: Row(
             children: [
               Avatar(
@@ -456,6 +465,7 @@ class _ChatPageState extends State<ChatPage> {
                               }),
                               onEdit: _startEdit,
                               onDelete: _delete,
+                              onSenderTap: sender == null ? null : () => _openProfile(sender),
                               onReact: (e) => _react(m, e, reactions[m.id] ?? const []),
                             ),
                           ],
