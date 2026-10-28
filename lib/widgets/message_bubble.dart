@@ -236,6 +236,7 @@ class MessageBubble extends StatelessWidget {
           constraints: BoxConstraints(maxWidth: maxW),
           child: GestureDetector(
             onLongPress: () => _menu(context),
+            onSecondaryTap: () => _menu(context), // right-click in the browser
             child: Column(
               crossAxisAlignment: mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
               children: [

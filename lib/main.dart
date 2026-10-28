@@ -1,6 +1,8 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -21,6 +23,8 @@ const brand = Color(0xFF4F6BED);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Right-click opens our message menu, not the browser's.
+  if (kIsWeb) await BrowserContextMenu.disableContextMenu();
   await Supabase.initialize(url: supabaseUrl, publishableKey: supabasePublishableKey);
   CallService.instance.navigatorKey = navigatorKey;
   await Push.init(navigatorKey);
