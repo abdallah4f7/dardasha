@@ -67,8 +67,9 @@ class _CallPageState extends State<CallPage> {
   @override
   Widget build(BuildContext context) {
     final l = L.of(context);
-    final showRemoteVideo = s.video && s.hasRemoteVideo && s.state == CallState.connected;
+    final showRemoteVideo = s.remoteVideo && s.state == CallState.connected;
     final incomingRinging = !s.outgoing && s.state == CallState.ringing;
+    final showLocalVideo = s.cameraOn && s.state != CallState.ended && s.localRenderer.textureId != null;
 
     return PopScope(
       canPop: s.state == CallState.ended,
@@ -81,81 +82,99 @@ class _CallPageState extends State<CallPage> {
           children: [
             if (showRemoteVideo)
               Positioned.fill(
-                child: RTCVideoView(s.remoteRenderer, objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover),
+                child: RTCVideoView(
+                  s.remoteRenderer,
+                  // A shared screen must be seen whole; a face can be cropped.
+                  objectFit: s.remoteScreen
+                      ? RTCVideoViewObjectFit.RTCVideoViewObjectFitContain
+                      : RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                ),
               ),
-            SafeArea(
-              child: Column(
-                children: [
-                  const SizedBox(height: 48),
-                  if (!showRemoteVideo) ...[
-                    Avatar(name: s.peer.displayName, url: s.peer.avatarUrl, radius: 56),
-                    const SizedBox(height: 20),
-                  ],
-                  Text(
-                    s.peer.displayName,
-                    style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(_status(l), style: const TextStyle(color: Colors.white70, fontSize: 16)),
-                  const Spacer(),
-                  if (incomingRinging)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 48),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          _RoundButton(
-                            icon: Icons.call_end,
-                            color: Colors.red,
-                            label: l.t('decline'),
-                            onTap: s.decline,
-                          ),
-                          _RoundButton(
-                            icon: s.video ? Icons.videocam : Icons.call,
-                            color: Colors.green,
-                            label: l.t('accept'),
-                            onTap: s.accept,
-                          ),
-                        ],
-                      ),
-                    )
-                  else if (s.state != CallState.ended)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 40),
-                      child: Wrap(
-                        alignment: WrapAlignment.center,
-                        spacing: 18,
-                        runSpacing: 18,
-                        children: [
-                          _RoundButton(
-                            icon: s.muted ? Icons.mic_off : Icons.mic,
-                            color: s.muted ? Colors.white : Colors.white24,
-                            iconColor: s.muted ? Colors.black : Colors.white,
-                            onTap: s.toggleMute,
-                          ),
-                          _RoundButton(
-                            icon: s.speaker ? Icons.volume_up : Icons.hearing,
-                            color: s.speaker ? Colors.white : Colors.white24,
-                            iconColor: s.speaker ? Colors.black : Colors.white,
-                            onTap: s.toggleSpeaker,
-                          ),
-                          if (s.video) ...[
-                            _RoundButton(
-                              icon: s.cameraOff ? Icons.videocam_off : Icons.videocam,
-                              color: s.cameraOff ? Colors.white : Colors.white24,
-                              iconColor: s.cameraOff ? Colors.black : Colors.white,
-                              onTap: s.toggleCamera,
-                            ),
-                            _RoundButton(icon: Icons.cameraswitch, color: Colors.white24, onTap: s.switchCamera),
-                          ],
-                          _RoundButton(icon: Icons.call_end, color: Colors.red, onTap: s.hangup),
-                        ],
-                      ),
+            Positioned.fill(
+              child: SafeArea(
+                child: Column(
+                  children: [
+                    const SizedBox(height: 48),
+                    if (!showRemoteVideo) ...[
+                      Avatar(name: s.peer.displayName, url: s.peer.avatarUrl, radius: 56),
+                      const SizedBox(height: 20),
+                    ],
+                    Text(
+                      s.peer.displayName,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w600),
                     ),
-                ],
+                    const SizedBox(height: 8),
+                    Text(_status(l), style: const TextStyle(color: Colors.white70, fontSize: 16)),
+                    if (s.sharingScreen) ...[
+                      const SizedBox(height: 12),
+                      Chip(
+                        avatar: const Icon(Icons.screen_share, size: 18),
+                        label: Text(l.t('sharingScreen')),
+                      ),
+                    ],
+                    const Spacer(),
+                    if (incomingRinging)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 48),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            _RoundButton(
+                              icon: Icons.call_end,
+                              color: Colors.red,
+                              label: l.t('decline'),
+                              onTap: s.decline,
+                            ),
+                            _RoundButton(
+                              icon: s.video ? Icons.videocam : Icons.call,
+                              color: Colors.green,
+                              label: l.t('accept'),
+                              onTap: s.accept,
+                            ),
+                          ],
+                        ),
+                      )
+                    else if (s.state != CallState.ended)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 40),
+                        child: Wrap(
+                          alignment: WrapAlignment.center,
+                          spacing: 14,
+                          runSpacing: 14,
+                          children: [
+                            _RoundButton(
+                              icon: s.muted ? Icons.mic_off : Icons.mic,
+                              active: s.muted,
+                              onTap: s.toggleMute,
+                            ),
+                            _RoundButton(
+                              icon: s.speaker ? Icons.volume_up : Icons.hearing,
+                              active: s.speaker,
+                              onTap: s.toggleSpeaker,
+                            ),
+                            if (s.canShareVideo) ...[
+                              _RoundButton(
+                                icon: s.cameraOn ? Icons.videocam : Icons.videocam_off,
+                                active: s.cameraOn,
+                                onTap: s.toggleCamera,
+                              ),
+                              if (s.cameraOn) _RoundButton(icon: Icons.cameraswitch, onTap: s.switchCamera),
+                              _RoundButton(
+                                icon: s.sharingScreen ? Icons.stop_screen_share : Icons.screen_share,
+                                active: s.sharingScreen,
+                                onTap: s.toggleScreenShare,
+                              ),
+                            ],
+                            _RoundButton(icon: Icons.call_end, color: Colors.red, onTap: s.hangup),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
-            if (s.video && !s.cameraOff && s.state != CallState.ended && s.localRenderer.textureId != null)
+            if (showLocalVideo)
               PositionedDirectional(
                 top: MediaQuery.paddingOf(context).top + 16,
                 end: 16,
@@ -165,7 +184,7 @@ class _CallPageState extends State<CallPage> {
                   borderRadius: BorderRadius.circular(14),
                   child: RTCVideoView(
                     s.localRenderer,
-                    mirror: true,
+                    mirror: s.frontCamera,
                     objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
                   ),
                 ),
@@ -178,34 +197,31 @@ class _CallPageState extends State<CallPage> {
 }
 
 class _RoundButton extends StatelessWidget {
-  const _RoundButton({
-    required this.icon,
-    required this.color,
-    required this.onTap,
-    this.label,
-    this.iconColor = Colors.white,
-  });
+  const _RoundButton({required this.icon, required this.onTap, this.color, this.active = false, this.label});
 
   final IconData icon;
-  final Color color;
-  final Color iconColor;
+
+  /// Fixed color (hang up / answer). Otherwise white when [active], translucent when not.
+  final Color? color;
+  final bool active;
   final VoidCallback onTap;
   final String? label;
 
   @override
   Widget build(BuildContext context) {
+    final inverted = color == null && active;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Material(
-          color: color,
+          color: color ?? (active ? Colors.white : Colors.white24),
           shape: const CircleBorder(),
           child: InkWell(
             customBorder: const CircleBorder(),
             onTap: onTap,
             child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Icon(icon, color: iconColor, size: 30),
+              padding: const EdgeInsets.all(16),
+              child: Icon(icon, color: inverted ? Colors.black : Colors.white, size: 28),
             ),
           ),
         ),

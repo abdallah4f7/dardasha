@@ -13,6 +13,7 @@ import 'pages/complete_profile_page.dart';
 import 'pages/home_page.dart';
 import 'services/api.dart';
 import 'services/calls.dart';
+import 'services/push.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
 
@@ -22,6 +23,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Supabase.initialize(url: supabaseUrl, publishableKey: supabasePublishableKey);
   CallService.instance.navigatorKey = navigatorKey;
+  await Push.init(navigatorKey);
   runApp(const ChatApp());
 }
 
@@ -129,6 +131,7 @@ class _AuthGateState extends State<AuthGate> {
 
     if (profile != null || failed) {
       CallService.instance.start();
+      Push.register();
       setState(() => _stage = _Stage.home);
     } else if (intent == 'oauth_login') {
       _startOnRegister = true;

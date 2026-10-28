@@ -6,11 +6,13 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../l10n.dart';
 import '../models.dart';
 import '../services/api.dart';
 import '../services/calls.dart';
+import '../services/push.dart';
 import '../widgets/avatar.dart';
 import '../widgets/common.dart';
 import '../widgets/message_bubble.dart';
@@ -59,8 +61,16 @@ class _ChatPageState extends State<ChatPage> {
       });
 
   Message? _replyTo;
+  Message? _editing;
+
+  // Shown right away, before the stream catches up. Deletes never reach a
+  // filtered stream, so they also come from [_deletes].
+  final Set<String> _deleted = {};
+  final Map<String, Message> _edited = {};
+  RealtimeChannel? _deletes;
 
   final _text = TextEditingController();
+  final _focus = FocusNode();
   final _picker = ImagePicker();
   final _recorder = AudioRecorder();
   Map<String, Profile> _members = {};
@@ -76,6 +86,20 @@ class _ChatPageState extends State<ChatPage> {
   void initState() {
     super.initState();
     _peer = widget.peer;
+    Push.openConversation = widget.conversationId;
+    Push.clearConversation(widget.conversationId);
+    _deletes = db
+        .channel('deletes:${widget.conversationId}')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.delete,
+          schema: 'public',
+          table: 'messages',
+          callback: (p) {
+            final id = p.oldRecord['id'];
+            if (id is String && mounted) setState(() => _deleted.add(id));
+          },
+        )
+        .subscribe();
     _text.addListener(() => setState(() {}));
     Api.members(widget.conversationId).then((list) {
       if (!mounted) return;
@@ -88,10 +112,42 @@ class _ChatPageState extends State<ChatPage> {
 
   @override
   void dispose() {
+    if (Push.openConversation == widget.conversationId) Push.openConversation = null;
+    if (_deletes != null) db.removeChannel(_deletes!);
     _recTicker?.cancel();
     _recorder.dispose();
     _text.dispose();
+    _focus.dispose();
     super.dispose();
+  }
+
+  void _startEdit(Message m) {
+    setState(() {
+      _replyTo = null;
+      _editing = m;
+    });
+    _text.text = m.content ?? '';
+    _focus.requestFocus();
+  }
+
+  void _cancelEdit() {
+    setState(() => _editing = null);
+    _text.clear();
+  }
+
+  void _delete(Message m) {
+    setState(() => _deleted.add(m.id));
+    Api.deleteMessage(m.id).catchError((Object e) {
+      if (!mounted) return;
+      setState(() => _deleted.remove(m.id));
+      showError(context, e);
+    });
+  }
+
+  /// The stream's copy, unless a local edit is newer than what it has seen.
+  Message _current(Message m) {
+    final local = _edited[m.id];
+    return local != null && m.content != local.content ? local : m;
   }
 
   /// Takes the pending reply (if any) as message meta and clears the banner.
@@ -132,6 +188,29 @@ class _ChatPageState extends State<ChatPage> {
     final t = _text.text.trim();
     if (t.isEmpty) return;
     _text.clear();
+    final editing = _editing;
+    if (editing != null) {
+      setState(() => _editing = null);
+      if (t == editing.content) return;
+      setState(
+        () => _edited[editing.id] = Message(
+          id: editing.id,
+          conversationId: editing.conversationId,
+          senderId: editing.senderId,
+          type: editing.type,
+          content: t,
+          mediaUrl: editing.mediaUrl,
+          meta: {...editing.meta, 'edited': true}..remove('preview'),
+          createdAt: editing.createdAt,
+        ),
+      );
+      Api.editMessage(editing, t).catchError((Object e) {
+        if (!mounted) return;
+        setState(() => _edited.remove(editing.id));
+        showError(context, e);
+      });
+      return;
+    }
     Api.sendText(widget.conversationId, t, meta: _takeReply()).catchError((Object e) {
       if (mounted) showError(context, e);
     });
@@ -332,7 +411,7 @@ class _ChatPageState extends State<ChatPage> {
               stream: _messages,
               builder: (context, snap) {
                 if (snap.hasError) return Center(child: Text('${l.t('error')}\n${snap.error}'));
-                final msgs = snap.data;
+                final msgs = snap.data?.where((m) => !_deleted.contains(m.id)).map(_current).toList();
                 if (msgs == null) return const Center(child: CircularProgressIndicator());
                 return StreamBuilder<Map<String, List<Reaction>>>(
                   stream: _reactions,
@@ -359,7 +438,12 @@ class _ChatPageState extends State<ChatPage> {
                               senderName: widget.isGroup && !mine && !sameSender ? sender?.displayName : null,
                               compact: sameSender,
                               reactions: reactions[m.id] ?? const [],
-                              onReply: (m) => setState(() => _replyTo = m),
+                              onReply: (m) => setState(() {
+                                _replyTo = m;
+                                if (_editing != null) _cancelEdit();
+                              }),
+                              onEdit: _startEdit,
+                              onDelete: _delete,
                               onReact: (e) => _react(m, e, reactions[m.id] ?? const []),
                             ),
                           ],
@@ -371,8 +455,16 @@ class _ChatPageState extends State<ChatPage> {
               },
             ),
           ),
-          if (_replyTo != null)
+          if (_editing != null)
             _ReplyBanner(
+              icon: Icons.edit_outlined,
+              name: l.t('editMessage'),
+              label: _editing!.content ?? '',
+              onClose: _cancelEdit,
+            )
+          else if (_replyTo != null)
+            _ReplyBanner(
+              icon: Icons.reply,
               name: _replyTo!.senderId == myId ? l.t('you') : (_members[_replyTo!.senderId]?.displayName ?? ''),
               label: lastMessageLabel(l, _replyTo!.type, _replyTo!.content),
               onClose: () => setState(() => _replyTo = null),
@@ -396,6 +488,7 @@ class _ChatPageState extends State<ChatPage> {
                         ? _RecordingBar(start: _recStart!, cancelling: _cancelRecording)
                         : TextField(
                             controller: _text,
+                            focusNode: _focus,
                             minLines: 1,
                             maxLines: 6,
                             textCapitalization: TextCapitalization.sentences,
@@ -414,7 +507,7 @@ class _ChatPageState extends State<ChatPage> {
                           heroTag: null,
                           elevation: 0,
                           onPressed: _sendText,
-                          child: const Icon(Icons.send_rounded),
+                          child: Icon(_editing != null ? Icons.check_rounded : Icons.send_rounded),
                         )
                       : GestureDetector(
                           onTap: () => toast(context, l.t('holdToRecord')),
@@ -510,8 +603,9 @@ class _DateChip extends StatelessWidget {
 }
 
 class _ReplyBanner extends StatelessWidget {
-  const _ReplyBanner({required this.name, required this.label, required this.onClose});
+  const _ReplyBanner({required this.icon, required this.name, required this.label, required this.onClose});
 
+  final IconData icon;
   final String name;
   final String label;
   final VoidCallback onClose;
@@ -529,7 +623,7 @@ class _ReplyBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.reply, color: scheme.primary, size: 20),
+          Icon(icon, color: scheme.primary, size: 20),
           const SizedBox(width: 8),
           Expanded(
             child: Column(

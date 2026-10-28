@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import '../l10n.dart';
 import '../models.dart';
 import '../services/api.dart';
+import '../services/push.dart';
 import '../widgets/avatar.dart';
 import '../widgets/common.dart';
 
@@ -113,6 +114,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   style: OutlinedButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
                   onPressed: () async {
                     Navigator.of(context).popUntil((r) => r.isFirst);
+                    await Push.unregister();
                     await db.auth.signOut();
                   },
                 ),

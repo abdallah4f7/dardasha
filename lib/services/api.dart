@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 
 import '../models.dart';
 import 'link_preview.dart';
+import 'push.dart';
 
 SupabaseClient get db => Supabase.instance.client;
 String get myId => db.auth.currentUser!.id;
@@ -102,12 +103,17 @@ class Api {
         })
         .select()
         .single();
+    if (type != 'call') Push.notify({'type': 'message', 'message_id': row['id']});
     return row;
   }
 
   /// Sends a text message, then attaches a preview card if it contains a link.
   static Future<void> sendText(String conversationId, String text, {Map<String, dynamic> meta = const {}}) async {
     final row = await send(conversationId, type: 'text', content: text, meta: meta);
+    await _attachPreview(row['id'] as String, text, meta);
+  }
+
+  static Future<void> _attachPreview(String messageId, String text, Map<String, dynamic> meta) async {
     final url = LinkPreview.firstUrl(text);
     if (url == null) return;
     final preview = await LinkPreview.fetch(url);
@@ -117,7 +123,13 @@ class Api {
         .update({
           'meta': {...meta, 'preview': preview.toMap()},
         })
-        .eq('id', row['id']);
+        .eq('id', messageId);
+  }
+
+  static Future<void> editMessage(Message m, String text) async {
+    final meta = {...m.meta, 'edited': true}..remove('preview');
+    await db.from('messages').update({'content': text, 'meta': meta}).eq('id', m.id);
+    await _attachPreview(m.id, text, meta);
   }
 
   static Future<void> deleteMessage(String id) => db.from('messages').delete().eq('id', id);
@@ -151,11 +163,15 @@ class Api {
     return rows.length;
   }
 
-  static Future<void> requestFriend(String userId) =>
-      db.from('friendships').insert({'requester': myId, 'addressee': userId});
+  static Future<void> requestFriend(String userId) async {
+    await db.from('friendships').insert({'requester': myId, 'addressee': userId});
+    Push.notify({'type': 'friend_request', 'to': userId});
+  }
 
-  static Future<void> acceptFriend(String requesterId) =>
-      db.from('friendships').update({'status': 'accepted'}).eq('requester', requesterId).eq('addressee', myId);
+  static Future<void> acceptFriend(String requesterId) async {
+    await db.from('friendships').update({'status': 'accepted'}).eq('requester', requesterId).eq('addressee', myId);
+    Push.notify({'type': 'friend_accept', 'to': requesterId});
+  }
 
   static Future<void> removeFriendship(Friendship f) =>
       db.from('friendships').delete().eq('requester', f.requesterId).eq('addressee', f.addresseeId);

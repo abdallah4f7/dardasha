@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../l10n.dart';
 import '../models.dart';
 import '../services/api.dart';
+import '../services/updater.dart';
 import '../widgets/avatar.dart';
 import '../widgets/common.dart';
 import 'chat_page.dart';
@@ -32,6 +33,7 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _load();
+    WidgetsBinding.instance.addPostFrameCallback((_) => Updater.check(context));
     _channel = db
         .channel('home:$myId')
         .onPostgresChanges(

@@ -59,6 +59,8 @@ class MessageBubble extends StatelessWidget {
     this.reactions = const [],
     required this.onReply,
     required this.onReact,
+    required this.onEdit,
+    required this.onDelete,
   });
 
   final Message message;
@@ -68,6 +70,8 @@ class MessageBubble extends StatelessWidget {
   final List<Reaction> reactions;
   final void Function(Message) onReply;
   final void Function(String emoji) onReact;
+  final void Function(Message) onEdit;
+  final void Function(Message) onDelete;
 
   bool get _bare => message.type == 'sticker';
 
@@ -114,6 +118,12 @@ class MessageBubble extends StatelessWidget {
                 leading: const Icon(Icons.copy),
                 title: Text(l.t('copy')),
                 onTap: () => Navigator.pop(c, 'copy'),
+              ),
+            if (mine && m.type == 'text')
+              ListTile(
+                leading: const Icon(Icons.edit_outlined),
+                title: Text(l.t('edit')),
+                onTap: () => Navigator.pop(c, 'edit'),
               ),
             if (_downloadable)
               ListTile(
@@ -165,6 +175,8 @@ class MessageBubble extends StatelessWidget {
       switch (action) {
         case 'reply':
           onReply(m);
+        case 'edit':
+          onEdit(m);
         case 'download':
           await downloadMessage(context, m);
         case 'copy':
@@ -174,7 +186,7 @@ class MessageBubble extends StatelessWidget {
           await Api.saveSticker(m.mediaUrl!);
           if (context.mounted) toast(context, l.t('stickerSaved'));
         case 'delete':
-          await Api.deleteMessage(m.id);
+          onDelete(m);
       }
     } catch (e) {
       if (context.mounted) showError(context, e);
@@ -194,7 +206,10 @@ class MessageBubble extends StatelessWidget {
     final tailOnRight = mine != isRtl;
 
     final time = Text(
-      formatTime(context, message.createdAt),
+      [
+        if (message.meta['edited'] == true) L.of(context).t('edited'),
+        formatTime(context, message.createdAt),
+      ].join(' · '),
       style: TextStyle(fontSize: 11, color: (_bare ? scheme.onSurface : fg).withValues(alpha: .7)),
     );
 

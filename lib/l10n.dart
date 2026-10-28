@@ -111,6 +111,15 @@ class L {
     'cancelRequest': 'Cancel request',
     'message': 'Message',
     'requestSent': 'Friend request sent',
+    'edit': 'Edit',
+    'edited': 'edited',
+    'editMessage': 'Edit message',
+    'sharingScreen': 'You are sharing your screen',
+    'updateAvailable': 'New update',
+    'later': 'Later',
+    'update': 'Update',
+    'downloadingUpdate': 'Downloading update…',
+    'updateFailed': "Couldn't install the update",
   };
 
   static const _ar = {
@@ -215,5 +224,14 @@ class L {
     'cancelRequest': 'إلغاء الطلب',
     'message': 'مراسلة',
     'requestSent': 'انرسل طلب الصداقة',
+    'edit': 'تعديل',
+    'edited': 'معدّلة',
+    'editMessage': 'تعديل الرسالة',
+    'sharingScreen': 'أنت تشارك شاشتك',
+    'updateAvailable': 'تحديث جديد',
+    'later': 'لاحقاً',
+    'update': 'تحديث',
+    'downloadingUpdate': 'جاري تنزيل التحديث…',
+    'updateFailed': 'ما قدرنا نثبّت التحديث',
   };
 }

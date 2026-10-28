@@ -206,6 +206,43 @@ drop trigger if exists messages_after_insert on public.messages;
 create trigger messages_after_insert after insert on public.messages
   for each row execute function public.on_message_insert();
 
+
+-- An edited message updates the chat list if it is the latest one
+create or replace function public.on_message_update() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  update conversations set last_message_text = left(new.content, 120)
+  where id = new.conversation_id and new.type = 'text' and last_message_at = new.created_at;
+  return new;
+end $$;
+
+drop trigger if exists messages_after_update on public.messages;
+create trigger messages_after_update after update of content on public.messages
+  for each row execute function public.on_message_update();
+
+-- ───────────── Push notifications ─────────────
+-- One row per phone. The `push` Edge Function reads these with the service role.
+create table if not exists public.push_tokens (
+  token text primary key,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  lang text not null default 'ar',
+  updated_at timestamptz not null default now()
+);
+create index if not exists push_tokens_user on public.push_tokens (user_id);
+alter table public.push_tokens enable row level security;
+drop policy if exists "push_tokens_own" on public.push_tokens;
+create policy "push_tokens_own" on public.push_tokens for all to authenticated
+  using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+-- A phone that switches accounts moves its token to the new one.
+create or replace function public.register_push_token(t text, l text) returns void
+language sql security definer set search_path = public as $$
+  insert into push_tokens (token, user_id, lang) values (t, auth.uid(), l)
+  on conflict (token) do update set user_id = auth.uid(), lang = excluded.lang, updated_at = now();
+$$;
+revoke execute on function public.register_push_token(text, text) from anon, public;
+grant execute on function public.register_push_token(text, text) to authenticated;
+
 -- ───────────── Realtime ─────────────
 do $$
 declare t text;
