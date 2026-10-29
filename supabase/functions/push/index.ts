@@ -73,7 +73,7 @@ async function sendTo(userIds: string[], push: Push) {
         data: push.data,
         android: push.call
           ? { priority: 'HIGH', ttl: '45s' }
-          : { priority: 'HIGH', notification: { channel_id: 'messages', tag: push.tag } },
+          : { priority: 'HIGH', notification: { channel_id: 'messages_v2', tag: push.tag } },
       };
       if (push.notification) message.notification = push.notification(lang === 'en' ? 'en' : 'ar');
       const res = await fetch(`https://fcm.googleapis.com/v1/projects/${account.project_id}/messages:send`, {
@@ -100,6 +100,7 @@ const labels = {
 
 function preview(lang: Lang, type: string, content: string | null) {
   if (type === 'text') return (content ?? '').slice(0, 200);
+  if (type === 'file') return `📎 ${content ?? ''}`.trim();
   if (type === 'sticker') return `${content ?? ''} ${labels[lang].sticker}`.trim();
   return labels[lang][type as 'image' | 'video' | 'voice'] ?? '';
 }
@@ -156,17 +157,29 @@ async function onMessage(uid: string, messageId: string) {
   );
 }
 
+// Calls may also ring a friend added into a call, who shares no chat with the caller.
+async function mayCall(a: string, b: string) {
+  if (await shareAConversation(a, b)) return true;
+  const { count } = await admin
+    .from('friendships')
+    .select('*', { count: 'exact', head: true })
+    .eq('status', 'accepted')
+    .or(`and(requester.eq.${a},addressee.eq.${b}),and(requester.eq.${b},addressee.eq.${a})`);
+  return (count ?? 0) > 0;
+}
+
 async function onCall(uid: string, to: string, callId: string, video: boolean) {
-  if (!(await shareAConversation(uid, to))) return;
+  if (!(await mayCall(uid, to))) return;
   const me = await profile(uid);
   await sendTo([to], {
     call: true,
-    data: { type: 'call', call_id: callId, video: String(video), from_name: me?.display_name ?? '' },
+    // from/to let the notification's "Decline" button answer the caller without opening the app.
+    data: { type: 'call', call_id: callId, video: String(video), from_name: me?.display_name ?? '', from: uid, to },
   });
 }
 
 async function onCallEnd(uid: string, to: string, callId: string) {
-  if (!(await shareAConversation(uid, to))) return;
+  if (!(await mayCall(uid, to))) return;
   await sendTo([to], { call: true, data: { type: 'call_end', call_id: callId } });
 }
 

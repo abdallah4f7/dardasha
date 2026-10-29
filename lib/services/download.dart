@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:gal/gal.dart';
 import 'package:http/http.dart' as http;
+import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -14,7 +15,35 @@ import '../widgets/common.dart';
 
 /// Photos, videos and stickers go to the gallery; voice messages open the share
 /// sheet so they can be saved to Files / Drive or sent elsewhere.
+/// Files open in whatever app the phone has for them (the browser downloads them).
+Future<void> openFile(BuildContext context, Message m) async {
+  final url = m.mediaUrl;
+  if (url == null) return;
+  final name = m.content ?? 'file';
+  final type = contentTypeFor(name);
+  if (kIsWeb) {
+    // Supabase sends it as an attachment under its original name.
+    await launchUrl(Uri.parse('$url?download=${Uri.encodeComponent(name)}'), webOnlyWindowName: '_blank');
+    return;
+  }
+  final dir = Directory('${(await getTemporaryDirectory()).path}/files/${m.id}');
+  final file = File('${dir.path}/${name.replaceAll(RegExp(r'[/\\]'), '_')}');
+  if (!await file.exists()) {
+    if (context.mounted) toast(context, '${L.of(context).t('download')}…');
+    final res = await http.get(Uri.parse(url));
+    if (res.statusCode != 200) throw HttpException('HTTP ${res.statusCode}');
+    await dir.create(recursive: true);
+    await file.writeAsBytes(res.bodyBytes);
+  }
+  final result = await OpenFilex.open(file.path, type: type);
+  // No app for this kind of file: let them send it somewhere that can.
+  if (result.type != ResultType.done) {
+    await SharePlus.instance.share(ShareParams(files: [XFile(file.path, mimeType: type)]));
+  }
+}
+
 Future<void> downloadMessage(BuildContext context, Message m) async {
+  if (m.type == 'file') return openFile(context, m);
   final url = m.mediaUrl;
   if (url == null) return;
   if (kIsWeb) {

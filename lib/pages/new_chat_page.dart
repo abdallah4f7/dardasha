@@ -32,10 +32,22 @@ class _NewChatPageState extends State<NewChatPage> {
 
   bool get _multi => widget.pickMany || widget.groupMode;
 
+  List<Profile> _friends = [];
+
   @override
   void initState() {
     super.initState();
-    _search('');
+    _loadFriends();
+  }
+
+  Future<void> _loadFriends() async {
+    try {
+      final all = await Api.friendships();
+      _friends = [for (final f in all) if (f.accepted) f.other(myId)];
+      await _search(_query.text);
+    } catch (e) {
+      if (mounted) showError(context, e);
+    }
   }
 
   void _onChanged(String q) {
@@ -43,10 +55,18 @@ class _NewChatPageState extends State<NewChatPage> {
     _debounce = Timer(const Duration(milliseconds: 300), () => _search(q));
   }
 
+  /// Friends are listed, and filtered by the search; anyone else shows up only
+  /// once their username is typed (almost) in full.
   Future<void> _search(String q) async {
     try {
-      final r = await Api.searchUsers(q);
-      if (mounted) setState(() => _results = r.where((p) => !widget.exclude.contains(p.id)).toList());
+      final needle = q.trim().replaceFirst('@', '').toLowerCase();
+      final friends = _friends.where(
+        (p) => p.username.toLowerCase().contains(needle) || p.displayName.toLowerCase().contains(needle),
+      );
+      final ids = {for (final p in friends) p.id};
+      final others = (await Api.searchUsers(q)).where((p) => !ids.contains(p.id));
+      if (!mounted) return;
+      setState(() => _results = [...friends, ...others].where((p) => !widget.exclude.contains(p.id)).toList());
     } catch (e) {
       if (mounted) showError(context, e);
     }

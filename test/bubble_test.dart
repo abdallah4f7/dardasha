@@ -15,6 +15,7 @@ void main() {
     'call': msg('call', meta: {'video': false, 'seconds': 0}),
     'video': msg('video', media: 'https://example.com/v.mp4'),
     'text-reply': msg('text', content: 'نقا', meta: {'reply': {'id': 'x', 'name': 'abood', 'text': 'hi', 'type': 'text'}}),
+    'file': msg('file', content: 'تقرير المشروع النهائي.pdf', media: 'https://example.com/f.pdf', meta: {'size': 1234567}),
     'text-edited': msg('text', content: 'hey', meta: {'edited': true}),
   };
   for (final e in cases.entries) {

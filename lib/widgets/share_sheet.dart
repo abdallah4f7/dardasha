@@ -23,6 +23,7 @@ String _mime(Message m) {
     'image' || 'sticker' => ext == 'png' ? 'image/png' : (ext == 'webp' ? 'image/webp' : 'image/jpeg'),
     'video' => 'video/mp4',
     'voice' => 'audio/mp4',
+    'file' => contentTypeFor(m.content ?? ''),
     _ => 'text/plain',
   };
 }

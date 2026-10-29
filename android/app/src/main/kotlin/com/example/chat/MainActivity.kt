@@ -26,6 +26,15 @@ class MainActivity : FlutterActivity() {
                     stopService(intent)
                     result.success(null)
                 }
+                // Only the call screen may show over the lock screen, and only during a call.
+                "showOnLock" -> {
+                    val on = call.arguments as Boolean
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                        setShowWhenLocked(on)
+                        setTurnScreenOn(on)
+                    }
+                    result.success(null)
+                }
                 else -> result.notImplemented()
             }
         }

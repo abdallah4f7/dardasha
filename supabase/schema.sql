@@ -57,7 +57,7 @@ create table if not exists public.messages (
   conversation_id uuid not null references public.conversations(id) on delete cascade,
   sender_id uuid not null default auth.uid() references public.profiles(id) on delete cascade,
   type text not null default 'text'
-    check (type in ('text', 'image', 'video', 'voice', 'sticker', 'call')),
+    check (type in ('text', 'image', 'video', 'voice', 'sticker', 'call', 'file')),
   content text,
   media_url text,
   meta jsonb not null default '{}'::jsonb,
@@ -195,7 +195,7 @@ create or replace function public.on_message_insert() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
   update conversations set
-    last_message_text = case when new.type = 'text' then left(new.content, 120) else null end,
+    last_message_text = case when new.type in ('text', 'file') then left(new.content, 120) else null end,
     last_message_type = new.type,
     last_message_at = new.created_at
   where id = new.conversation_id;
@@ -219,6 +219,11 @@ end $$;
 drop trigger if exists messages_after_update on public.messages;
 create trigger messages_after_update after update of content on public.messages
   for each row execute function public.on_message_update();
+
+-- Files (documents, archives…) as a message type; their name doubles as the chat-list preview.
+alter table public.messages drop constraint if exists messages_type_check;
+alter table public.messages add constraint messages_type_check
+  check (type in ('text', 'image', 'video', 'voice', 'sticker', 'call', 'file'));
 
 -- ───────────── Push notifications ─────────────
 -- One row per phone. The `push` Edge Function reads these with the service role.

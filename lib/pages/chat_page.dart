@@ -1,10 +1,14 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -81,8 +85,22 @@ class _ChatPageState extends State<ChatPage> {
 
   bool _recording = false;
   bool _cancelRecording = false;
-  DateTime? _recStart;
+
+  /// Slid up onto the lock: recording goes on hands-free, with send / pause / delete buttons.
+  bool _locked = false;
+  bool _paused = false;
+  DateTime? _recStart; // start of the current (unpaused) stretch
+  Duration _recBefore = Duration.zero; // recorded before the last pause
   Timer? _recTicker;
+
+  /// Phones stream AAC frames that can be joined back to back, so a paused
+  /// recording can be played as it stands and then continued.
+  final _recBytes = BytesBuilder(copy: false);
+  StreamSubscription<Uint8List>? _recSub;
+  AudioPlayer? _preview;
+
+  Duration get _recElapsed =>
+      _recBefore + (_paused || _recStart == null ? Duration.zero : DateTime.now().difference(_recStart!));
 
   @override
   void initState() {
@@ -117,6 +135,8 @@ class _ChatPageState extends State<ChatPage> {
     if (Push.openConversation == widget.conversationId) Push.openConversation = null;
     if (_deletes != null) db.removeChannel(_deletes!);
     _recTicker?.cancel();
+    _recSub?.cancel();
+    _preview?.dispose();
     _recorder.dispose();
     _text.dispose();
     _focus.dispose();
@@ -244,6 +264,19 @@ class _ChatPageState extends State<ChatPage> {
     await Api.send(widget.conversationId, type: 'video', mediaUrl: url, meta: reply);
   });
 
+  Future<void> _sendFile(PlatformFile f, [Map<String, dynamic> reply = const {}]) => _guard(() async {
+    final bytes = await f.readAsBytes();
+    final ext = f.extension?.toLowerCase() ?? 'bin';
+    final url = await Api.upload(bytes, ext, contentTypeFor(f.name));
+    await Api.send(
+      widget.conversationId,
+      type: 'file',
+      content: f.name,
+      mediaUrl: url,
+      meta: {...reply, 'size': bytes.length},
+    );
+  });
+
   void _sendSticker(StickerChoice s) {
     Api.send(widget.conversationId, type: 'sticker', mediaUrl: s.url, content: s.emoji, meta: _takeReply()).catchError((
       Object e,
@@ -281,6 +314,11 @@ class _ChatPageState extends State<ChatPage> {
               title: Text(l.t('recordVideo')),
               onTap: () => Navigator.pop(c, 'recordVideo'),
             ),
+            ListTile(
+              leading: const Icon(Icons.insert_drive_file_outlined),
+              title: Text(l.t('file')),
+              onTap: () => Navigator.pop(c, 'file'),
+            ),
           ],
         ),
       ),
@@ -302,6 +340,13 @@ class _ChatPageState extends State<ChatPage> {
       case 'recordVideo':
         final x = await _picker.pickVideo(source: ImageSource.camera, maxDuration: const Duration(minutes: 3));
         if (x != null) await _sendVideo(x, _takeReply());
+      case 'file':
+        final files = await FilePicker.pickFiles();
+        if (files.isEmpty) return;
+        final reply = _takeReply();
+        for (final (i, f) in files.indexed) {
+          await _sendFile(f, i == 0 ? reply : const {});
+        }
     }
   }
 
@@ -313,48 +358,113 @@ class _ChatPageState extends State<ChatPage> {
       if (mounted) toast(context, L.of(context).t('micDenied'));
       return;
     }
-    var path = '';
+    _recBytes.clear();
     if (kIsWeb) {
       _recordingAac = await _recorder.isEncoderSupported(AudioEncoder.aacLc);
+      final encoder = _recordingAac ? AudioEncoder.aacLc : AudioEncoder.opus;
+      await _recorder.start(RecordConfig(encoder: encoder, bitRate: 64000), path: '');
     } else {
-      final dir = await getTemporaryDirectory();
-      path = '${dir.path}/voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      final stream = await _recorder.startStream(
+        const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 64000, numChannels: 1),
+      );
+      _recSub = stream.listen(_recBytes.add);
     }
-    final encoder = _recordingAac ? AudioEncoder.aacLc : AudioEncoder.opus;
-    await _recorder.start(RecordConfig(encoder: encoder, bitRate: 64000), path: path);
     HapticFeedback.mediumImpact();
     setState(() {
       _recording = true;
       _cancelRecording = false;
+      _locked = false;
+      _paused = false;
+      _recBefore = Duration.zero;
       _recStart = DateTime.now();
     });
     _recTicker = Timer.periodic(const Duration(milliseconds: 250), (_) => setState(() {}));
   }
 
+  /// Ends the recording and returns its audio (null when there is none).
+  Future<Uint8List?> _finishRecording() async {
+    _recTicker?.cancel();
+    await _preview?.stop();
+    final path = await _recorder.stop();
+    if (kIsWeb) return path == null ? null : await XFile(path).readAsBytes();
+    await _recSub?.asFuture<void>().timeout(const Duration(seconds: 2), onTimeout: () {});
+    _recSub = null;
+    return _recBytes.takeBytes();
+  }
+
+  void _resetRecording() {
+    _preview?.dispose();
+    _preview = null;
+    setState(() {
+      _recording = false;
+      _locked = false;
+      _paused = false;
+    });
+  }
+
+  /// Finger lifted (sends unless slid away to cancel), or the send button when locked.
   Future<void> _stopRecording() async {
     if (!_recording) return;
-    _recTicker?.cancel();
-    final path = await _recorder.stop();
-    final ms = DateTime.now().difference(_recStart!).inMilliseconds;
+    final ms = _recElapsed.inMilliseconds;
     final cancel = _cancelRecording;
-    setState(() => _recording = false);
-    if (cancel || path == null || ms < 700) return;
+    final bytes = await _finishRecording();
+    _resetRecording();
+    if (cancel || bytes == null || bytes.isEmpty || ms < 700) return;
     final reply = _takeReply();
     await _guard(() async {
-      final bytes = await XFile(path).readAsBytes();
-      final url = _recordingAac
-          ? await Api.upload(bytes, 'm4a', 'audio/mp4')
-          : await Api.upload(bytes, 'webm', 'audio/webm');
+      final url = kIsWeb
+          ? (_recordingAac
+                ? await Api.upload(bytes, 'm4a', 'audio/mp4')
+                : await Api.upload(bytes, 'webm', 'audio/webm'))
+          : await Api.upload(bytes, 'aac', 'audio/aac');
       await Api.send(widget.conversationId, type: 'voice', mediaUrl: url, meta: {...reply, 'ms': ms});
     });
   }
 
-  void _call(bool video) {
-    final peer = _peer;
-    if (widget.isGroup || peer == null) {
-      toast(context, L.of(context).t('groupCallsSoon'));
+  Future<void> _deleteRecording() async {
+    await _finishRecording();
+    _recBytes.clear();
+    _resetRecording();
+  }
+
+  /// Pausing makes what was recorded so far playable; continuing stops the playback.
+  Future<void> _togglePause() async {
+    if (_paused) {
+      await _preview?.pause();
+      await _recorder.resume();
+      setState(() {
+        _paused = false;
+        _recStart = DateTime.now();
+      });
       return;
     }
+    await _recorder.pause();
+    setState(() {
+      _recBefore = _recElapsed;
+      _paused = true;
+    });
+    if (kIsWeb) return; // the browser only hands over the audio when recording stops
+    final file = File('${(await getTemporaryDirectory()).path}/voice_preview.aac');
+    await file.writeAsBytes(_recBytes.toBytes());
+    final player = _preview ??= AudioPlayer();
+    await player.setFilePath(file.path);
+    if (mounted) setState(() {});
+  }
+
+  void _call(bool video) {
+    if (widget.isGroup) {
+      if (_members.length < 2) return;
+      CallService.instance.callGroup(
+        context,
+        _members.values.toList(),
+        video: video,
+        conversationId: widget.conversationId,
+        groupName: widget.title,
+      );
+      return;
+    }
+    final peer = _peer;
+    if (peer == null) return;
     CallService.instance.call(context, peer, video: video, conversationId: widget.conversationId);
   }
 
@@ -494,7 +604,16 @@ class _ChatPageState extends State<ChatPage> {
           if (_uploads > 0) LinearProgressIndicator(minHeight: 2, backgroundColor: scheme.surfaceContainerHighest),
           SafeArea(
             top: false,
-            child: Padding(
+            child: _locked
+                ? _LockedRecorder(
+                    elapsed: _recElapsed,
+                    paused: _paused,
+                    preview: _preview,
+                    onSend: _stopRecording,
+                    onPause: _togglePause,
+                    onDelete: _deleteRecording,
+                  )
+                : Padding(
               padding: const EdgeInsets.fromLTRB(6, 6, 6, 8),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
@@ -507,7 +626,7 @@ class _ChatPageState extends State<ChatPage> {
                     ),
                   Expanded(
                     child: _recording
-                        ? _RecordingBar(start: _recStart!, cancelling: _cancelRecording)
+                        ? _RecordingBar(elapsed: _recElapsed, cancelling: _cancelRecording)
                         : TextField(
                             controller: _text,
                             focusNode: _focus,
@@ -535,19 +654,45 @@ class _ChatPageState extends State<ChatPage> {
                           onTap: () => toast(context, l.t('holdToRecord')),
                           onLongPressStart: (_) => _startRecording(),
                           onLongPressMoveUpdate: (d) {
+                            if (!_recording || _locked) return;
+                            // Up onto the lock: keep recording without holding.
+                            if (d.offsetFromOrigin.dy < -_lockDistance) {
+                              HapticFeedback.mediumImpact();
+                              setState(() {
+                                _locked = true;
+                                _cancelRecording = false;
+                              });
+                              return;
+                            }
                             final cancel = d.offsetFromOrigin.dx.abs() > 90;
                             if (cancel != _cancelRecording) setState(() => _cancelRecording = cancel);
                           },
-                          onLongPressEnd: (_) => _stopRecording(),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 150),
-                            width: _recording ? 56 : 40,
-                            height: _recording ? 56 : 40,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: _recording ? scheme.error : scheme.primaryContainer,
-                            ),
-                            child: Icon(Icons.mic, color: _recording ? scheme.onError : scheme.onPrimaryContainer),
+                          onLongPressEnd: (_) {
+                            if (!_locked) _stopRecording();
+                          },
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            alignment: Alignment.bottomCenter,
+                            children: [
+                              if (_recording)
+                                Positioned(
+                                  bottom: 64,
+                                  child: _LockHint(color: scheme.surfaceContainerHighest, fg: scheme.onSurfaceVariant),
+                                ),
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 150),
+                                width: _recording ? 56 : 40,
+                                height: _recording ? 56 : 40,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: _recording ? scheme.error : scheme.primaryContainer,
+                                ),
+                                child: Icon(
+                                  Icons.mic,
+                                  color: _recording ? scheme.onError : scheme.onPrimaryContainer,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                 ],
@@ -560,10 +705,148 @@ class _ChatPageState extends State<ChatPage> {
   }
 }
 
-class _RecordingBar extends StatelessWidget {
-  const _RecordingBar({required this.start, required this.cancelling});
+const _lockDistance = 80.0;
 
-  final DateTime start;
+/// Above the mic while it is held: slide up to here to lock the recording.
+class _LockHint extends StatelessWidget {
+  const _LockHint({required this.color, required this.fg});
+
+  final Color color;
+  final Color fg;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(20)),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.lock_outline, size: 20, color: fg),
+          Icon(Icons.keyboard_arrow_up_rounded, size: 20, color: fg),
+        ],
+      ),
+    );
+  }
+}
+
+/// A locked recording: what was recorded (playable while paused) above
+/// delete, pause / continue and send.
+class _LockedRecorder extends StatelessWidget {
+  const _LockedRecorder({
+    required this.elapsed,
+    required this.paused,
+    required this.preview,
+    required this.onSend,
+    required this.onPause,
+    required this.onDelete,
+  });
+
+  final Duration elapsed;
+  final bool paused;
+  final AudioPlayer? preview;
+  final VoidCallback onSend;
+  final VoidCallback onPause;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = L.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    final player = preview;
+    const tabular = TextStyle(fontFeatures: [ui.FontFeature.tabularFigures()]);
+    return Container(
+      margin: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      decoration: BoxDecoration(color: scheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(24)),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            height: 48,
+            child: paused && player != null
+                ? StreamBuilder<PlayerState>(
+                    stream: player.playerStateStream,
+                    builder: (_, snap) {
+                      final playing = snap.data?.playing == true &&
+                          snap.data?.processingState != ProcessingState.completed;
+                      return Row(
+                        children: [
+                          IconButton(
+                            icon: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
+                            onPressed: () async {
+                              if (playing) return player.pause();
+                              if (player.processingState == ProcessingState.completed) {
+                                await player.seek(Duration.zero);
+                              }
+                              await player.play();
+                            },
+                          ),
+                          Expanded(
+                            child: StreamBuilder<Duration>(
+                              stream: player.positionStream,
+                              builder: (_, pos) {
+                                final total = player.duration ?? elapsed;
+                                final at = pos.data ?? Duration.zero;
+                                final max = total.inMilliseconds.toDouble().clamp(1, double.infinity).toDouble();
+                                return Slider(
+                                  max: max,
+                                  value: at.inMilliseconds.toDouble().clamp(0, max),
+                                  onChanged: (v) => player.seek(Duration(milliseconds: v.round())),
+                                );
+                              },
+                            ),
+                          ),
+                          Text(formatDuration(elapsed), style: tabular),
+                        ],
+                      );
+                    },
+                  )
+                : Row(
+                    children: [
+                      Icon(
+                        paused ? Icons.pause_circle_outline : Icons.fiber_manual_record,
+                        color: scheme.error,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(formatDuration(elapsed), style: tabular),
+                    ],
+                  ),
+          ),
+          // Laid out by reading direction: in Arabic delete sits on the right, send on the left.
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              IconButton(
+                tooltip: l.t('delete'),
+                icon: Icon(Icons.delete_outline, color: scheme.error, size: 28),
+                onPressed: onDelete,
+              ),
+              IconButton.filledTonal(
+                tooltip: paused ? l.t('resumeRecording') : l.t('pauseRecording'),
+                icon: Icon(paused ? Icons.mic : Icons.pause_rounded),
+                onPressed: onPause,
+              ),
+              FloatingActionButton.small(
+                heroTag: null,
+                elevation: 0,
+                tooltip: l.t('send'),
+                onPressed: onSend,
+                child: const Icon(Icons.send_rounded),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RecordingBar extends StatelessWidget {
+  const _RecordingBar({required this.elapsed, required this.cancelling});
+
+  final Duration elapsed;
   final bool cancelling;
 
   @override
@@ -579,7 +862,7 @@ class _RecordingBar extends StatelessWidget {
           Icon(cancelling ? Icons.delete_outline : Icons.fiber_manual_record, color: scheme.error, size: 20),
           const SizedBox(width: 8),
           Text(
-            formatDuration(DateTime.now().difference(start)),
+            formatDuration(elapsed),
             style: const TextStyle(fontFeatures: [ui.FontFeature.tabularFigures()]),
           ),
           const Spacer(),

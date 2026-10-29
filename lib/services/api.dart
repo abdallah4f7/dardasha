@@ -13,6 +13,14 @@ String get myId => db.auth.currentUser!.id;
 
 const maxUploadBytes = 50 * 1024 * 1024;
 
+/// A search finds someone who isn't a friend only when it is the start of their
+/// username and at most two letters short of it, so nobody can browse everyone.
+bool usernameFound(String username, String query) {
+  final q = query.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '').toLowerCase();
+  final u = username.toLowerCase();
+  return q.isNotEmpty && u.startsWith(q) && u.length - q.length <= 2;
+}
+
 class Api {
   static final Map<String, Profile> _profileCache = {};
 
@@ -25,15 +33,13 @@ class Api {
 
   static void cacheProfile(Profile p) => _profileCache[p.id] = p;
 
+  /// Strangers are found only by (nearly) their whole username, see [usernameFound].
   static Future<List<Profile>> searchUsers(String query) async {
-    final q = query.replaceAll(RegExp(r'[,()%*\\]'), '').trim();
-    final rows = await db
-        .from('profiles')
-        .select()
-        .or('username.ilike.%$q%,display_name.ilike.%$q%')
-        .neq('id', myId)
-        .limit(30);
-    return rows.map(Profile.fromMap).toList();
+    final q = query.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '').toLowerCase();
+    if (q.isEmpty) return [];
+    final rows = await db.from('profiles').select().ilike('username', '$q%').neq('id', myId).limit(50);
+    // ilike treats "_" as a wildcard, so the exact check happens here.
+    return rows.map(Profile.fromMap).where((p) => usernameFound(p.username, query)).toList();
   }
 
   /// Members of a conversation with their profiles.

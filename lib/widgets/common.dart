@@ -53,6 +53,17 @@ String contentTypeFor(String path) {
     '3gp' => 'video/3gpp',
     'm4a' => 'audio/mp4',
     'aac' => 'audio/aac',
+    'mp3' => 'audio/mpeg',
+    'pdf' => 'application/pdf',
+    'txt' => 'text/plain',
+    'zip' => 'application/zip',
+    'doc' => 'application/msword',
+    'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'xls' => 'application/vnd.ms-excel',
+    'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'ppt' => 'application/vnd.ms-powerpoint',
+    'pptx' => 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'apk' => 'application/vnd.android.package-archive',
     _ => 'application/octet-stream',
   };
 }
@@ -64,5 +75,6 @@ String lastMessageLabel(L l, String? type, String? text) => switch (type) {
   'voice' => '🎤 ${l.t('voiceMessage')}',
   'sticker' => '✨ ${l.t('sticker')}',
   'call' => '📞 ${l.t('callMsg')}',
+  'file' => '📎 ${text ?? l.t('file')}',
   _ => text ?? '',
 };

@@ -81,7 +81,7 @@ class MessageBubble extends StatelessWidget {
   bool get _bare => message.type == 'sticker';
 
   bool get _downloadable =>
-      message.mediaUrl != null && const {'image', 'video', 'voice', 'sticker'}.contains(message.type);
+      message.mediaUrl != null && const {'image', 'video', 'voice', 'sticker', 'file'}.contains(message.type);
 
   String? get _myReaction => reactions.where((r) => r.userId == myId).firstOrNull?.emoji;
 
@@ -232,6 +232,7 @@ class MessageBubble extends StatelessWidget {
       'voice' => _VoiceContent(message: message, color: fg),
       'sticker' => _StickerContent(message: message),
       'call' => _CallContent(message: message, color: fg),
+      'file' => _FileContent(message: message, color: fg),
       _ => _TextContent(message: message, color: fg, mine: mine),
     };
 
@@ -661,6 +662,68 @@ class _StickerContent extends StatelessWidget {
       height: 150,
       fit: BoxFit.contain,
       placeholder: (_, _) => const SizedBox(width: 150, height: 150),
+    );
+  }
+}
+
+class _FileContent extends StatelessWidget {
+  const _FileContent({required this.message, required this.color});
+
+  final Message message;
+  final Color color;
+
+  static String _size(num bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(0)} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final name = message.content ?? L.of(context).t('file');
+    final ext = name.contains('.') ? name.split('.').last.toUpperCase() : '';
+    final size = message.meta['size'] as num?;
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () async {
+        try {
+          await openFile(context, message);
+        } catch (e) {
+          if (context.mounted) showError(context, e);
+        }
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircleAvatar(
+              radius: 22,
+              backgroundColor: color.withValues(alpha: .15),
+              child: Icon(Icons.insert_drive_file_rounded, color: color),
+            ),
+            const SizedBox(width: 10),
+            Flexible(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: color, fontWeight: FontWeight.w600),
+                  ),
+                  Text(
+                    [if (size != null) _size(size), if (ext.isNotEmpty) ext].join(' · '),
+                    textDirection: TextDirection.ltr,
+                    style: TextStyle(color: color.withValues(alpha: .7), fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

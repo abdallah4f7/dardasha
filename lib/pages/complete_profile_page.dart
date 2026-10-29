@@ -29,13 +29,15 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
   void initState() {
     super.initState();
     // Prefill from Google when available.
-    final meta = db.auth.currentUser?.userMetadata ?? {};
+    final user = db.auth.currentUser;
+    final meta = user?.userMetadata ?? {};
     _name.text = (meta['full_name'] ?? meta['name'] ?? meta['global_name'] ?? '') as String;
     _avatarUrl = (meta['avatar_url'] ?? meta['picture']) as String?;
-    final suggestion = ((meta['preferred_username'] ?? meta['user_name'] ?? '') as String).toLowerCase().replaceAll(
-      RegExp(r'[^a-z0-9_]'),
-      '',
-    );
+    // Google: the email without its domain, dots turned into underscores (john.doe@gmail.com → john_doe).
+    final raw = user?.appMetadata['provider'] == 'google'
+        ? (user?.email ?? '').split('@').first.replaceAll(RegExp(r'[.\-]'), '_')
+        : (meta['preferred_username'] ?? meta['user_name'] ?? '') as String;
+    final suggestion = raw.toLowerCase().replaceAll(RegExp(r'[^a-z0-9_]'), '');
     if (suggestion.length >= 3) _username.text = suggestion.substring(0, suggestion.length.clamp(3, 20));
   }
 
