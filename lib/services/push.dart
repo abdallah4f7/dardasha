@@ -198,7 +198,7 @@ class Push {
       id: _callNotificationId,
       title: d['from_name'] as String?,
       body: body,
-      payload: jsonEncode({'type': 'call', 'call_id': d['call_id'], 'from': d['from'], 'to': d['to']}),
+      payload: jsonEncode({'type': 'call', 'call_id': d['call_id'], 'from': d['caller'], 'to': d['callee']}),
       notificationDetails: NotificationDetails(
         android: AndroidNotificationDetails(
           _callsChannel,

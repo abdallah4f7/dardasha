@@ -81,12 +81,14 @@ async function sendTo(userIds: string[], push: Push) {
         headers: { Authorization: `Bearer ${auth}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ message }),
       });
-      // Uninstalled app or expired token: forget it.
-      if (res.status === 404 || res.status === 400) {
+      // Uninstalled app or expired token: forget it. (A bad message is our fault, not the phone's.)
+      if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        const code = err?.error?.details?.[0]?.errorCode;
-        if (res.status === 404 || code === 'UNREGISTERED' || code === 'INVALID_ARGUMENT') {
+        const codes = (err?.error?.details ?? []).map((d: { errorCode?: string }) => d.errorCode);
+        if (res.status === 404 || codes.includes('UNREGISTERED')) {
           await admin.from('push_tokens').delete().eq('token', token);
+        } else {
+          console.error('FCM', res.status, JSON.stringify(err));
         }
       }
     }),
@@ -173,8 +175,9 @@ async function onCall(uid: string, to: string, callId: string, video: boolean) {
   const me = await profile(uid);
   await sendTo([to], {
     call: true,
-    // from/to let the notification's "Decline" button answer the caller without opening the app.
-    data: { type: 'call', call_id: callId, video: String(video), from_name: me?.display_name ?? '', from: uid, to },
+    // caller/callee let the notification's "Decline" button answer without opening the app.
+    // (FCM reserves the data key "from".)
+    data: { type: 'call', call_id: callId, video: String(video), from_name: me?.display_name ?? '', caller: uid, callee: to },
   });
 }
 
