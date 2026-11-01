@@ -86,6 +86,23 @@ class Api {
     return {for (final r in rows) r['user_id'] as String};
   }
 
+  /// The main owner: whoever created the group, or was handed it.
+  static Future<String?> groupCreator(String conversationId) async {
+    final row = await db.from('conversations').select('created_by').eq('id', conversationId).single();
+    return row['created_by'] as String?;
+  }
+
+  /// Owners make another member an owner too, or take it back (never from the main owner).
+  static Future<void> setOwner(String conversationId, String userId, bool owner) => db
+      .from('conversation_members')
+      .update({'role': owner ? 'admin' : 'member'})
+      .eq('conversation_id', conversationId)
+      .eq('user_id', userId);
+
+  /// The main owner hands the group over: [userId] becomes its only owner.
+  static Future<void> transferGroup(String conversationId, String userId) =>
+      db.rpc('transfer_group', params: {'conv': conversationId, 'new_owner': userId});
+
   /// Owner only (the database refuses anyone else).
   static Future<void> removeMember(String conversationId, String userId) =>
       db.from('conversation_members').delete().eq('conversation_id', conversationId).eq('user_id', userId);

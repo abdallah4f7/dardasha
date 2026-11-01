@@ -247,26 +247,75 @@ drop policy if exists "conv_delete_owner" on public.conversations;
 create policy "conv_delete_owner" on public.conversations for delete to authenticated
   using (is_group and public.is_admin(id));
 
--- An owner who leaves hands the group to whoever has been in it longest.
-create or replace function public.on_member_leave() returns trigger
-language plpgsql security definer set search_path = public as $
+
+-- Owners can make other members owners too, or take it back. The main owner
+-- (whoever created the group, or was handed it) can't be demoted or removed by
+-- them, and is the only one who can hand the group over.
+create or replace function public.is_creator(conv uuid, member uuid) returns boolean
+language sql security definer stable set search_path = public as $$
+  select exists (select 1 from conversations where id = conv and created_by = member);
+$$;
+
+drop policy if exists "members_role" on public.conversation_members;
+create policy "members_role" on public.conversation_members for update to authenticated
+  using (public.is_admin(conversation_id) and not public.is_creator(conversation_id, user_id))
+  with check (role in ('admin', 'member'));
+
+drop policy if exists "members_leave" on public.conversation_members;
+create policy "members_leave" on public.conversation_members for delete to authenticated
+  using (
+    user_id = auth.uid()
+    or (public.is_admin(conversation_id) and not public.is_creator(conversation_id, user_id))
+  );
+
+-- The main owner hands the group to [new_owner], who becomes its only owner.
+create or replace function public.transfer_group(conv uuid, new_owner uuid) returns void
+language plpgsql security definer set search_path = public as $$
 begin
-  if old.role = 'admin'
-    and exists (select 1 from conversations where id = old.conversation_id) -- not the whole group being deleted
-    and not exists (select 1 from conversation_members where conversation_id = old.conversation_id and role = 'admin')
-  then
+  if not public.is_creator(conv, auth.uid()) then
+    raise exception 'only the group''s owner can hand it over';
+  end if;
+  if not exists (select 1 from conversation_members where conversation_id = conv and user_id = new_owner) then
+    raise exception 'not a member';
+  end if;
+  update conversation_members set role = case when user_id = new_owner then 'admin' else 'member' end
+  where conversation_id = conv;
+  update conversations set created_by = new_owner where id = conv;
+end $$;
+
+-- An owner who leaves: if nobody else owns the group, whoever has been in it
+-- longest gets it; if they were the main owner, the longest-standing owner
+-- becomes the main owner.
+create or replace function public.on_member_leave() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare heir uuid;
+begin
+  if old.role <> 'admin' or not exists (select 1 from conversations where id = old.conversation_id) then
+    return old; -- not an owner, or the whole group is being deleted
+  end if;
+  if not exists (select 1 from conversation_members where conversation_id = old.conversation_id and role = 'admin') then
     update conversation_members set role = 'admin'
     where conversation_id = old.conversation_id
       and user_id = (
         select user_id from conversation_members where conversation_id = old.conversation_id order by joined_at limit 1
       );
   end if;
+  if public.is_creator(old.conversation_id, old.user_id) then
+    select user_id into heir from conversation_members
+    where conversation_id = old.conversation_id and role = 'admin' order by joined_at limit 1;
+    update conversations set created_by = heir where id = old.conversation_id;
+  end if;
   return old;
-end $;
+end $$;
 
 drop trigger if exists members_after_delete on public.conversation_members;
 create trigger members_after_delete after delete on public.conversation_members
   for each row execute function public.on_member_leave();
+
+-- Only the main owner deletes the whole group.
+drop policy if exists "conv_delete_owner" on public.conversations;
+create policy "conv_delete_owner" on public.conversations for delete to authenticated
+  using (is_group and public.is_creator(id, auth.uid()));
 
 -- ───────────── Push notifications ─────────────
 -- One row per phone. The `push` Edge Function reads these with the service role.

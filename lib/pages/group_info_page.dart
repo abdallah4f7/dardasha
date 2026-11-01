@@ -26,11 +26,13 @@ class GroupInfoPage extends StatefulWidget {
 class _GroupInfoPageState extends State<GroupInfoPage> {
   List<Profile>? _members;
   Set<String> _owners = {};
+  String? _mainOwner;
   late String _name = widget.name;
   late String? _avatarUrl = widget.avatarUrl;
   bool _busy = false;
 
   bool get _isOwner => _owners.contains(myId);
+  bool get _isMainOwner => _mainOwner == myId;
 
   @override
   void initState() {
@@ -39,13 +41,19 @@ class _GroupInfoPageState extends State<GroupInfoPage> {
   }
 
   Future<void> _load() async {
-    final (m, owners) = await (Api.members(widget.conversationId), Api.admins(widget.conversationId)).wait;
-    // The owner first, then everyone else.
-    m.sort((a, b) => (owners.contains(b.id) ? 1 : 0) - (owners.contains(a.id) ? 1 : 0));
+    final (m, owners, main) = await (
+      Api.members(widget.conversationId),
+      Api.admins(widget.conversationId),
+      Api.groupCreator(widget.conversationId),
+    ).wait;
+    // The main owner first, then the other owners, then everyone else.
+    int rank(Profile p) => p.id == main ? 0 : (owners.contains(p.id) ? 1 : 2);
+    m.sort((a, b) => rank(a) - rank(b));
     if (mounted) {
       setState(() {
         _members = m;
         _owners = owners;
+        _mainOwner = main;
       });
     }
   }
@@ -137,12 +145,32 @@ class _GroupInfoPageState extends State<GroupInfoPage> {
               title: Text(l.t('viewProfile')),
               onTap: () => Navigator.pop(c, 'profile'),
             ),
-            if (_isOwner && !_owners.contains(m.id))
+            // Nobody but the main owner themselves touches the main owner.
+            if (_isOwner && m.id != _mainOwner) ...[
+              if (_owners.contains(m.id))
+                ListTile(
+                  leading: const Icon(Icons.remove_moderator_outlined),
+                  title: Text(l.t('removeOwner')),
+                  onTap: () => Navigator.pop(c, 'unowner'),
+                )
+              else
+                ListTile(
+                  leading: const Icon(Icons.add_moderator_outlined),
+                  title: Text(l.t('makeOwner')),
+                  onTap: () => Navigator.pop(c, 'owner'),
+                ),
+              if (_isMainOwner)
+                ListTile(
+                  leading: const Icon(Icons.swap_horiz_rounded),
+                  title: Text(l.t('transferOwnership')),
+                  onTap: () => Navigator.pop(c, 'transfer'),
+                ),
               ListTile(
                 leading: Icon(Icons.person_remove_outlined, color: Theme.of(c).colorScheme.error),
                 title: Text(l.t('removeFromGroup'), style: TextStyle(color: Theme.of(c).colorScheme.error)),
                 onTap: () => Navigator.pop(c, 'remove'),
               ),
+            ],
           ],
         ),
       ),
@@ -151,6 +179,17 @@ class _GroupInfoPageState extends State<GroupInfoPage> {
     switch (choice) {
       case 'profile':
         Navigator.of(context).push(MaterialPageRoute(builder: (_) => UserPage(user: m)));
+      case 'owner' || 'unowner':
+        await _guard(() async {
+          await Api.setOwner(widget.conversationId, m.id, choice == 'owner');
+          await _load();
+        });
+      case 'transfer':
+        if (!await _confirm(l.t('transferOwnershipQ').replaceAll('{name}', m.displayName), l.t('transfer'))) return;
+        await _guard(() async {
+          await Api.transferGroup(widget.conversationId, m.id);
+          await _load();
+        });
       case 'remove':
         if (!await _confirm(l.t('removeFromGroupQ').replaceAll('{name}', m.displayName), l.t('remove'))) return;
         await _guard(() async {
@@ -245,7 +284,7 @@ class _GroupInfoPageState extends State<GroupInfoPage> {
                 subtitle: Text('@${m.username}', textDirection: TextDirection.ltr),
                 trailing: _owners.contains(m.id)
                     ? Chip(
-                        label: Text(l.t('groupOwner')),
+                        label: Text(l.t(m.id == _mainOwner ? 'mainOwner' : 'groupOwner')),
                         visualDensity: VisualDensity.compact,
                         side: BorderSide.none,
                         backgroundColor: scheme.primaryContainer,
@@ -263,7 +302,7 @@ class _GroupInfoPageState extends State<GroupInfoPage> {
                 if (context.mounted) Navigator.of(context).popUntil((r) => r.isFirst);
               },
             ),
-            if (_isOwner)
+            if (_isMainOwner)
               ListTile(
                 leading: Icon(Icons.delete_forever_outlined, color: scheme.error),
                 title: Text(l.t('deleteGroup'), style: TextStyle(color: scheme.error)),
