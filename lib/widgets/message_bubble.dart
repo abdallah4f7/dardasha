@@ -65,6 +65,7 @@ class MessageBubble extends StatelessWidget {
     required this.onEdit,
     required this.onDelete,
     this.onSenderTap,
+    this.canDeleteAny = false,
   });
 
   final Message message;
@@ -77,6 +78,9 @@ class MessageBubble extends StatelessWidget {
   final void Function(Message) onEdit;
   final void Function(Message) onDelete;
   final VoidCallback? onSenderTap;
+
+  /// The group's owner may delete anyone's message.
+  final bool canDeleteAny;
 
   bool get _bare => message.type == 'sticker';
 
@@ -148,7 +152,7 @@ class MessageBubble extends StatelessWidget {
                 title: Text(l.t('saveSticker')),
                 onTap: () => Navigator.pop(c, 'sticker'),
               ),
-            if (mine)
+            if (mine || canDeleteAny)
               ListTile(
                 leading: Icon(Icons.delete_outline, color: Theme.of(c).colorScheme.error),
                 title: Text(l.t('deleteMessage'), style: TextStyle(color: Theme.of(c).colorScheme.error)),

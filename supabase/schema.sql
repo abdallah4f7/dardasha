@@ -225,6 +225,49 @@ alter table public.messages drop constraint if exists messages_type_check;
 alter table public.messages add constraint messages_type_check
   check (type in ('text', 'image', 'video', 'voice', 'sticker', 'call', 'file'));
 
+-- ───────────── Group owner ─────────────
+-- Whoever creates a group is its owner (role 'admin'): they can remove members,
+-- delete anyone's message and delete the group. Name and photo stay editable by every member.
+create or replace function public.is_admin(conv uuid) returns boolean
+language sql security definer stable set search_path = public as $
+  select exists (
+    select 1 from conversation_members where conversation_id = conv and user_id = auth.uid() and role = 'admin'
+  );
+$;
+
+drop policy if exists "members_leave" on public.conversation_members;
+create policy "members_leave" on public.conversation_members for delete to authenticated
+  using (user_id = auth.uid() or public.is_admin(conversation_id));
+
+drop policy if exists "msg_delete_own" on public.messages;
+create policy "msg_delete_own" on public.messages for delete to authenticated
+  using (sender_id = auth.uid() or public.is_admin(conversation_id));
+
+drop policy if exists "conv_delete_owner" on public.conversations;
+create policy "conv_delete_owner" on public.conversations for delete to authenticated
+  using (is_group and public.is_admin(id));
+
+-- An owner who leaves hands the group to whoever has been in it longest.
+create or replace function public.on_member_leave() returns trigger
+language plpgsql security definer set search_path = public as $
+begin
+  if old.role = 'admin'
+    and exists (select 1 from conversations where id = old.conversation_id) -- not the whole group being deleted
+    and not exists (select 1 from conversation_members where conversation_id = old.conversation_id and role = 'admin')
+  then
+    update conversation_members set role = 'admin'
+    where conversation_id = old.conversation_id
+      and user_id = (
+        select user_id from conversation_members where conversation_id = old.conversation_id order by joined_at limit 1
+      );
+  end if;
+  return old;
+end $;
+
+drop trigger if exists members_after_delete on public.conversation_members;
+create trigger members_after_delete after delete on public.conversation_members
+  for each row execute function public.on_member_leave();
+
 -- ───────────── Push notifications ─────────────
 -- One row per phone. The `push` Edge Function reads these with the service role.
 create table if not exists public.push_tokens (

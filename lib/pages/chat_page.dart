@@ -80,6 +80,9 @@ class _ChatPageState extends State<ChatPage> {
   final _picker = ImagePicker();
   final _recorder = AudioRecorder();
   Map<String, Profile> _members = {};
+  bool _isOwner = false; // the group's owner deletes anyone's messages
+  late String _title = widget.title;
+  late String? _avatarUrl = widget.avatarUrl;
   Profile? _peer;
   int _uploads = 0;
 
@@ -128,6 +131,11 @@ class _ChatPageState extends State<ChatPage> {
         if (!widget.isGroup) _peer ??= list.where((p) => p.id != myId).firstOrNull;
       });
     });
+    if (widget.isGroup) {
+      Api.admins(widget.conversationId).then((owners) {
+        if (mounted) setState(() => _isOwner = owners.contains(myId));
+      });
+    }
   }
 
   @override
@@ -451,6 +459,20 @@ class _ChatPageState extends State<ChatPage> {
     if (mounted) setState(() {});
   }
 
+  /// Anyone may rename the group or change its photo there; show the result here.
+  Future<void> _openGroupInfo() async {
+    final r = await Navigator.of(context).push<GroupInfoResult>(
+      MaterialPageRoute(
+        builder: (_) => GroupInfoPage(conversationId: widget.conversationId, name: _title, avatarUrl: _avatarUrl),
+      ),
+    );
+    if (r == null || !mounted) return;
+    setState(() {
+      _title = r.name;
+      _avatarUrl = r.avatarUrl;
+    });
+  }
+
   void _call(bool video) {
     if (widget.isGroup) {
       if (_members.length < 2) return;
@@ -459,7 +481,7 @@ class _ChatPageState extends State<ChatPage> {
         _members.values.toList(),
         video: video,
         conversationId: widget.conversationId,
-        groupName: widget.title,
+        groupName: _title,
       );
       return;
     }
@@ -477,21 +499,17 @@ class _ChatPageState extends State<ChatPage> {
         titleSpacing: 0,
         title: InkWell(
           onTap: widget.isGroup
-              ? () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => GroupInfoPage(conversationId: widget.conversationId, name: widget.title),
-                  ),
-                )
+              ? _openGroupInfo
               : _peer == null
               ? null
               : () => _openProfile(_peer!),
           child: Row(
             children: [
               Avatar(
-                name: widget.title,
-                url: widget.avatarUrl ?? _peer?.avatarUrl,
+                name: _title,
+                url: _avatarUrl ?? _peer?.avatarUrl,
                 radius: 18,
-                group: widget.isGroup && widget.avatarUrl == null,
+                group: widget.isGroup && _avatarUrl == null,
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -499,7 +517,7 @@ class _ChatPageState extends State<ChatPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      widget.title.isEmpty ? (_peer?.displayName ?? '') : widget.title,
+                      _title.isEmpty ? (_peer?.displayName ?? '') : _title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -527,11 +545,7 @@ class _ChatPageState extends State<ChatPage> {
           ] else
             IconButton(
               icon: const Icon(Icons.info_outline),
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => GroupInfoPage(conversationId: widget.conversationId, name: widget.title),
-                ),
-              ),
+              onPressed: _openGroupInfo,
             ),
         ],
       ),
@@ -575,6 +589,7 @@ class _ChatPageState extends State<ChatPage> {
                               }),
                               onEdit: _startEdit,
                               onDelete: _delete,
+                              canDeleteAny: _isOwner,
                               onSenderTap: sender == null ? null : () => _openProfile(sender),
                               onReact: (e) => _react(m, e, reactions[m.id] ?? const []),
                             ),

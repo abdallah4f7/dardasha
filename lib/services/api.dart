@@ -76,6 +76,29 @@ class Api {
       .from('conversation_members')
       .insert(ids.map((id) => {'conversation_id': conversationId, 'user_id': id}).toList());
 
+  /// The group's owner (whoever created it, or was handed it when they left).
+  static Future<Set<String>> admins(String conversationId) async {
+    final rows = await db
+        .from('conversation_members')
+        .select('user_id')
+        .eq('conversation_id', conversationId)
+        .eq('role', 'admin');
+    return {for (final r in rows) r['user_id'] as String};
+  }
+
+  /// Owner only (the database refuses anyone else).
+  static Future<void> removeMember(String conversationId, String userId) =>
+      db.from('conversation_members').delete().eq('conversation_id', conversationId).eq('user_id', userId);
+
+  /// Owner only: the group, its members and all its messages.
+  static Future<void> deleteGroup(String conversationId) => db.from('conversations').delete().eq('id', conversationId);
+
+  /// Any member may rename the group or change its photo.
+  static Future<void> updateGroup(String conversationId, {String? name, String? avatarUrl}) => db
+      .from('conversations')
+      .update({'name': ?name, 'avatar_url': ?avatarUrl})
+      .eq('id', conversationId);
+
   static Future<void> leave(String conversationId) =>
       db.from('conversation_members').delete().eq('conversation_id', conversationId).eq('user_id', myId);
 
