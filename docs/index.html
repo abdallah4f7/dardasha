@@ -30,7 +30,6 @@
     background: linear-gradient(135deg, var(--brand), var(--brand-2)); color: #fff;
     font-size: 1.15rem; font-weight: 700; box-shadow: 0 8px 22px rgba(79,107,237,.35);
   }
-  .btn-2 { margin-top: 12px; background: var(--card); color: var(--text); border: 1px solid var(--line); box-shadow: none; font-size: 1.05rem; }
   .btn:active { transform: scale(.98); }
   .btn svg { width: 24px; height: 24px; fill: currentColor; }
   .meta { color: var(--muted); font-size: .9rem; margin: 10px 0 0; }
@@ -58,10 +57,6 @@
     <span class="ar">تحميل</span><span class="en">Download</span>
   </a>
   <p class="meta" id="get-meta"><span class="ar">الإصدار <span class="ver">1.0.2</span></span><span class="en">Version <span class="ver">1.0.2</span></span></p>
-  <a class="btn btn-2" id="pc" href="https://github.com/abdallah4f7/dardasha/releases/download/desktop/Dardasha-Setup.exe">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-6v2h3v2H7v-2h3v-2H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zm1 2v8h14V7H5z"/></svg>
-    <span class="ar">تحميل للكمبيوتر (ويندوز)</span><span class="en">Download for PC (Windows)</span>
-  </a>
   <p class="meta" id="iphone-link"><a href="app/" style="color: inherit"><span class="ar">عندك آيفون؟ افتح نسخة الويب</span><span class="en">Have an iPhone? Open the web version</span></a></p>
 
   <section class="card" id="iphone">
@@ -77,22 +72,6 @@
       <li>Tap the Share button <b>⬆︎</b> at the bottom.</li>
       <li>Choose “Add to Home Screen”, then “Add”.</li>
       <li>Open “Chat” from your Home Screen like any app.</li>
-    </ol>
-  </section>
-
-  <section class="card" id="windows">
-    <h2><span class="ar">طريقة التثبيت على الكمبيوتر</span><span class="en">How to install on PC</span></h2>
-    <ol class="ar">
-      <li>اضغط «تحميل للكمبيوتر».</li>
-      <li>افتح الملف بعد ما يخلص التحميل.</li>
-      <li>إذا طلع «Windows protected your PC» اضغط «More info» ثم «Run anyway».</li>
-      <li>بيتثبت ويفتح لحاله، وتلقاه في قائمة ابدأ باسم «دردشة».</li>
-    </ol>
-    <ol class="en">
-      <li>Click “Download for PC”.</li>
-      <li>Open the file when the download finishes.</li>
-      <li>If “Windows protected your PC” appears, click “More info”, then “Run anyway”.</li>
-      <li>It installs and opens by itself; find it in the Start menu as “Chat”.</li>
     </ol>
   </section>
 
@@ -155,22 +134,8 @@
     document.getElementById('get-meta').style.display = 'none';
     document.getElementById('iphone-link').style.display = 'none';
     document.getElementById('android').style.display = 'none';
-    document.getElementById('pc').style.display = 'none';
-    document.getElementById('windows').style.display = 'none';
   } else {
     document.getElementById('iphone').style.display = 'none';
-    // On a computer the PC download comes first and Android second.
-    if (/Windows/.test(navigator.userAgent) && !/Android/.test(navigator.userAgent)) {
-      const get = document.getElementById('get'), pc = document.getElementById('pc');
-      pc.classList.remove('btn-2');
-      get.classList.add('btn-2');
-      get.querySelector('.ar').textContent = 'تحميل للأندرويد';
-      get.querySelector('.en').textContent = 'Download for Android';
-      get.parentNode.insertBefore(pc, get);
-      document.getElementById('android').style.display = 'none';
-    } else {
-      document.getElementById('windows').style.display = 'none';
-    }
   }
   fetch('https://api.github.com/repos/abdallah4f7/dardasha/releases/latest')
     .then(r => r.json())
