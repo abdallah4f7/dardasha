@@ -51,3 +51,7 @@ app.*.map.json
 firebase-key.json
 android/app/google-services.json
 supabase/.temp/
+
+# Windows app (Electron)
+/desktop/node_modules/
+/desktop/dist/

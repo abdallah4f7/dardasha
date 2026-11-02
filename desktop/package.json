@@ -1,0 +1,33 @@
+{
+  "name": "dardasha",
+  "productName": "Dardasha",
+  "version": "1.0.0",
+  "description": "دردشة",
+  "author": "abdallah4f7",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "electron": "33.2.1",
+    "electron-builder": "25.1.8"
+  },
+  "build": {
+    "appId": "com.abdallah4f7.dardasha",
+    "productName": "Dardasha",
+    "files": ["main.js", "build/icon.png"],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.png",
+      "artifactName": "Dardasha-Setup.exe"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "shortcutName": "دردشة",
+      "uninstallDisplayName": "دردشة"
+    }
+  }
+}
