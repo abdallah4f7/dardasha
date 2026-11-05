@@ -52,4 +52,7 @@ flutter {
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
     implementation("androidx.core:core-ktx:1.13.1")
+    // Same version as flutter_webrtc: the camera effects edit its video frames.
+    implementation("io.github.webrtc-sdk:android:150.7871.04")
+    implementation("com.google.mlkit:face-detection:16.1.7")
 }

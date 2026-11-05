@@ -13,6 +13,7 @@ import 'package:http/http.dart' as http;
 import '../config.dart';
 import '../pages/chat_page.dart';
 import '../pages/friends_page.dart';
+import '../pages/reports_page.dart';
 import 'api.dart';
 import 'calls.dart';
 
@@ -280,6 +281,9 @@ class Push {
         nav.push(MaterialPageRoute(builder: (_) => const FriendsPage(initialTab: 1)));
       case 'friend_accept':
         nav.push(MaterialPageRoute(builder: (_) => const FriendsPage()));
+      case 'report':
+        final id = d['report_id'] as String?;
+        if (id != null) nav.push(MaterialPageRoute(builder: (_) => ReportPage(reportId: id)));
     }
   }
 }

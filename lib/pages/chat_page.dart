@@ -33,10 +33,14 @@ class ChatPage extends StatefulWidget {
     required this.title,
     this.avatarUrl,
     this.peer,
+    this.isStatus = false,
   });
 
   final String conversationId;
   final bool isGroup;
+
+  /// My status: sent like a chat, but what's sent here becomes a status.
+  final bool isStatus;
   final String title;
   final String? avatarUrl;
   final Profile? peer;
@@ -535,7 +539,9 @@ class _ChatPageState extends State<ChatPage> {
           ),
         ),
         actions: [
-          if (!widget.isGroup) ...[
+          if (widget.isStatus)
+            const SizedBox.shrink()
+          else if (!widget.isGroup) ...[
             IconButton(
               tooltip: l.t('videoCall'),
               icon: const Icon(Icons.videocam_outlined),
@@ -551,12 +557,25 @@ class _ChatPageState extends State<ChatPage> {
       ),
       body: Column(
         children: [
+          if (widget.isStatus)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: Text(
+                l.t('statusHint'),
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
           Expanded(
             child: StreamBuilder<List<Message>>(
               stream: _messages,
               builder: (context, snap) {
                 if (snap.hasError) return Center(child: Text('${l.t('error')}\n${snap.error}'));
-                final msgs = snap.data?.where((m) => !_deleted.contains(m.id)).map(_current).toList();
+                final oldest = DateTime.now().subtract(Api.statusLife);
+                final msgs = snap.data
+                    ?.where((m) => !_deleted.contains(m.id) && (!widget.isStatus || m.createdAt.isAfter(oldest)))
+                    .map(_current)
+                    .toList();
                 if (msgs == null) return const Center(child: CircularProgressIndicator());
                 return StreamBuilder<Map<String, List<Reaction>>>(
                   stream: _reactions,

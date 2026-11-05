@@ -170,7 +170,13 @@ async function mayCall(a: string, b: string) {
   return (count ?? 0) > 0;
 }
 
+async function isBanned(id: string) {
+  const { data } = await admin.from('bans').select('until').eq('user_id', id).maybeSingle();
+  return !!data && (data.until === null || new Date(data.until) > new Date());
+}
+
 async function onCall(uid: string, to: string, callId: string, video: boolean) {
+  if (await isBanned(uid)) return;
   if (!(await mayCall(uid, to))) return;
   const me = await profile(uid);
   await sendTo([to], {
@@ -205,6 +211,56 @@ async function onFriend(uid: string, to: string, accepted: boolean) {
   });
 }
 
+// Tells the moderators about a report; only the person who filed it can trigger this.
+async function onReport(uid: string, reportId: string) {
+  const { data: r } = await admin
+    .from('reports')
+    .select('id, note, message_type, message_content, reported_id')
+    .eq('id', reportId)
+    .eq('reporter_id', uid)
+    .eq('status', 'open')
+    .single();
+  if (!r) return;
+  const { data: mods } = await admin.from('moderators').select('user_id');
+  const who = r.reported_id ? ((await profile(r.reported_id))?.display_name ?? '') : '';
+  await sendTo(
+    (mods ?? []).map((m) => m.user_id),
+    {
+      data: { type: 'report', report_id: r.id },
+      tag: `report:${r.id}`,
+      notification: (lang) => ({
+        title: lang === 'ar' ? `بلاغ جديد على ${who}` : `New report about ${who}`,
+        body: r.note ?? preview(lang, r.message_type, r.message_content),
+      }),
+    },
+  );
+}
+
+// Tells the reported person the decision and the explanation, never who reported them.
+async function onModeration(uid: string, reportId: string) {
+  const { data: mod } = await admin.from('moderators').select('user_id').eq('user_id', uid).maybeSingle();
+  if (!mod) return;
+  const { data: r } = await admin
+    .from('reports')
+    .select('reported_id, action, reason, ban_until')
+    .eq('id', reportId)
+    .eq('status', 'resolved')
+    .single();
+  if (!r?.reported_id || r.action === 'none') return;
+  const titles = {
+    ar: { delete: 'انحذفت رسالة لك', temp_ban: 'انوقف حسابك مؤقتاً', ban: 'انوقف حسابك نهائياً' },
+    en: { delete: 'A message of yours was removed', temp_ban: 'Your account was suspended', ban: 'Your account was banned' },
+  };
+  await sendTo([r.reported_id], {
+    data: { type: 'moderation' },
+    tag: `moderation:${reportId}`,
+    notification: (lang) => ({
+      title: titles[lang][r.action as 'delete' | 'temp_ban' | 'ban'],
+      body: r.reason ?? (lang === 'ar' ? 'مخالفة لقوانين التطبيق' : "It went against the app's rules"),
+    }),
+  });
+}
+
 Deno.serve(async (req) => {
   const jwt = (req.headers.get('Authorization') ?? '').replace('Bearer ', '');
   const { data: auth } = await admin.auth.getUser(jwt);
@@ -228,6 +284,12 @@ Deno.serve(async (req) => {
         break;
       case 'friend_accept':
         await onFriend(uid, body.to, true);
+        break;
+      case 'report':
+        await onReport(uid, body.report_id);
+        break;
+      case 'moderation':
+        await onModeration(uid, body.report_id);
         break;
       default:
         return new Response('Unknown type', { status: 400 });

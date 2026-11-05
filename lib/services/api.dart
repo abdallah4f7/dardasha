@@ -191,6 +191,85 @@ class Api {
 
   static Future<void> deleteMessage(String id) => db.from('messages').delete().eq('id', id);
 
+  // ───── Statuses ─────
+
+  static const statusLife = Duration(hours: 24);
+
+  /// My status is a chat of my own: what is sent there becomes a status.
+  static Future<String> myStatusConversation() async => await db.rpc('my_status') as String;
+
+  static Future<int> myStatusCount() async {
+    final rows = await db
+        .from('messages')
+        .select('id, conversations!inner(is_status)')
+        .eq('conversations.is_status', true)
+        .eq('sender_id', myId)
+        .gt('created_at', DateTime.now().subtract(statusLife).toUtc().toIso8601String());
+    return rows.length;
+  }
+
+  /// Statuses of friends and people in a group with me; the database decides who that is.
+  static Future<List<Message>> statusFeed() async {
+    final rows = await db.rpc('status_feed') as List;
+    return rows.map((r) => Message.fromMap(r as Map<String, dynamic>)).toList();
+  }
+
+  // ───── Reports and bans ─────
+
+  static Future<void> reportMessage(Message m, String note) async {
+    final id = await db.rpc('report_message', params: {'msg': m.id, 'note': note});
+    Push.notify({'type': 'report', 'report_id': id});
+  }
+
+  static Future<Ban?> myBan() => banOf(myId);
+
+  static Future<Ban?> banOf(String userId) async {
+    final row = await db.from('bans').select().eq('user_id', userId).maybeSingle();
+    final ban = row == null ? null : Ban.fromMap(row);
+    return ban != null && ban.active ? ban : null;
+  }
+
+  /// Open reports, or null for anyone who isn't a moderator.
+  static Future<int?> openReportCount() async {
+    final me = await db.from('moderators').select('user_id').eq('user_id', myId).maybeSingle();
+    if (me == null) return null;
+    final rows = await db.from('reports').select('id').eq('status', 'open');
+    return rows.length;
+  }
+
+  static const _reportFields =
+      '*, reporter:profiles!reports_reporter_id_fkey(*), reported:profiles!reports_reported_id_fkey(*)';
+
+  static Future<List<Report>> reports() async {
+    final rows = await db
+        .from('reports')
+        .select(_reportFields)
+        .order('status', ascending: true) // "open" sorts before "resolved"
+        .order('created_at', ascending: false)
+        .limit(200);
+    return rows.map(Report.fromMap).toList();
+  }
+
+  static Future<Report> report(String id) async =>
+      Report.fromMap(await db.from('reports').select(_reportFields).eq('id', id).single());
+
+  /// The messages around the reported one, and the chat's name.
+  static Future<Map<String, dynamic>> reportContext(String id) async =>
+      Map<String, dynamic>.from(await db.rpc('report_context', params: {'rep': id}) as Map);
+
+  static Future<void> resolveReport(String id, {required String action, int? minutes, required String reason}) async {
+    await db.rpc('resolve_report', params: {'rep': id, 'act': action, 'minutes': minutes, 'why': reason});
+    if (action != 'none') Push.notify({'type': 'moderation', 'report_id': id});
+  }
+
+  static Future<void> liftBan(String userId) => db.rpc('lift_ban', params: {'member': userId});
+
+  /// Which message of mine a moderator removed and why, once.
+  static Future<Map<String, dynamic>?> takeModerationNotice() async {
+    final notice = await db.rpc('take_moderation_notice');
+    return notice == null ? null : Map<String, dynamic>.from(notice as Map);
+  }
+
   /// One reaction per person per message; picking the same emoji again removes it.
   static Future<void> react(Message m, String emoji, {String? current}) {
     if (current == emoji) {

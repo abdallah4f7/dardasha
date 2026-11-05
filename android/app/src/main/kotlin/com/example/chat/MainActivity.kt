@@ -6,6 +6,8 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.os.Build
 import androidx.core.content.FileProvider
+import com.cloudwebrtc.webrtc.FlutterWebRTCPlugin
+import com.cloudwebrtc.webrtc.video.LocalVideoTrack
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -33,6 +35,25 @@ class MainActivity : FlutterActivity() {
                         setShowWhenLocked(on)
                         setTurnScreenOn(on)
                     }
+                    result.success(null)
+                }
+                else -> result.notImplemented()
+            }
+        }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dardasha/camera_fx").setMethodCallHandler { call, result ->
+            when (call.method) {
+                "attach" -> {
+                    val track = FlutterWebRTCPlugin.sharedSingleton.getLocalTrack(call.argument<String>("track"))
+                    (track as? LocalVideoTrack)?.apply {
+                        removeProcessor(CameraFx)
+                        addProcessor(CameraFx)
+                    }
+                    result.success(track is LocalVideoTrack)
+                }
+                "set" -> {
+                    CameraFx.brightness = call.argument<Double>("brightness")!!.toFloat()
+                    CameraFx.gray = call.argument<Double>("gray")!!.toFloat()
+                    CameraFx.blurFaces = call.argument<Boolean>("blur")!!
                     result.success(null)
                 }
                 else -> result.notImplemented()

@@ -10,6 +10,7 @@ import '../l10n.dart';
 import '../models.dart';
 import '../services/api.dart';
 import '../services/calls.dart';
+import '../services/camera_fx.dart';
 import '../services/push.dart';
 import '../widgets/avatar.dart';
 import '../widgets/common.dart';
@@ -120,6 +121,54 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
       s.disposeRenderers();
     }
     super.dispose();
+  }
+
+  /// Sliders for this phone's own camera. The sheet leaves the call visible, so
+  /// the small preview shows the result as it changes.
+  void _cameraEffects() {
+    final l = L.of(context);
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      barrierColor: Colors.transparent,
+      builder: (c) => StatefulBuilder(
+        builder: (c, setSheet) {
+          void change(VoidCallback edit) {
+            setSheet(edit);
+            s.applyCameraEffects();
+          }
+
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(l.t('brightness')),
+                  Slider(
+                    min: -1,
+                    max: 1,
+                    value: CameraFx.brightness,
+                    onChanged: (v) => change(() => CameraFx.brightness = v),
+                  ),
+                  Text(l.t('blackAndWhite')),
+                  Slider(value: CameraFx.gray, onChanged: (v) => change(() => CameraFx.gray = v)),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(l.t('blurFaces')),
+                    value: CameraFx.blurFaces,
+                    onChanged: (v) => change(() => CameraFx.blurFaces = v),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    ).then((_) {
+      if (mounted) setState(() {}); // the button lights up while an effect is on
+    });
   }
 
   /// Long-press on someone: their profile, and removing them when allowed.
@@ -309,6 +358,8 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
                                 onTap: s.toggleCamera,
                               ),
                               if (s.cameraOn) _RoundButton(icon: Icons.cameraswitch, onTap: s.switchCamera),
+                              if (s.cameraOn && CameraFx.supported)
+                                _RoundButton(icon: Icons.tune, active: CameraFx.anyOn, onTap: _cameraEffects),
                               _RoundButton(
                                 icon: s.sharingScreen ? Icons.stop_screen_share : Icons.screen_share,
                                 active: s.sharingScreen,

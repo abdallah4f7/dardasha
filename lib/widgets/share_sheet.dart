@@ -189,7 +189,7 @@ class _ForwardPageState extends State<ForwardPage> {
       ).wait;
       if (!mounted) return;
       setState(() {
-        _convs = rows.map(Conversation.fromMap).toList();
+        _convs = rows.where((r) => r['is_status'] != true).map(Conversation.fromMap).toList();
         _peers = peers;
       });
     } catch (e) {

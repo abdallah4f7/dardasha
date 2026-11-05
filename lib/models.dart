@@ -115,3 +115,66 @@ class Message {
     createdAt: DateTime.parse(m['created_at'] as String).toLocal(),
   );
 }
+
+class Ban {
+  Ban({this.until, this.reason});
+
+  /// Null means for good.
+  final DateTime? until;
+  final String? reason;
+
+  factory Ban.fromMap(Map<String, dynamic> m) => Ban(
+    until: m['until'] == null ? null : DateTime.parse(m['until'] as String).toLocal(),
+    reason: m['reason'] as String?,
+  );
+
+  bool get active => until == null || until!.isAfter(DateTime.now());
+}
+
+class Report {
+  Report({
+    required this.id,
+    this.reporter,
+    this.reported,
+    required this.reportedId,
+    required this.type,
+    this.content,
+    this.mediaUrl,
+    required this.messageAt,
+    this.note,
+    required this.open,
+    this.action,
+    this.reason,
+  });
+
+  final String id;
+  final Profile? reporter;
+  final Profile? reported;
+  final String? reportedId;
+  final String type;
+  final String? content;
+  final String? mediaUrl;
+  final DateTime messageAt;
+  final String? note;
+  final bool open;
+  final String? action; // none | delete | temp_ban | ban
+  final String? reason;
+
+  factory Report.fromMap(Map<String, dynamic> m) {
+    Profile? person(String key) => m[key] == null ? null : Profile.fromMap(m[key] as Map<String, dynamic>);
+    return Report(
+      id: m['id'] as String,
+      reporter: person('reporter'),
+      reported: person('reported'),
+      reportedId: m['reported_id'] as String?,
+      type: m['message_type'] as String,
+      content: m['message_content'] as String?,
+      mediaUrl: m['message_media_url'] as String?,
+      messageAt: DateTime.parse(m['message_at'] as String).toLocal(),
+      note: m['note'] as String?,
+      open: m['status'] == 'open',
+      action: m['action'] as String?,
+      reason: m['reason'] as String?,
+    );
+  }
+}

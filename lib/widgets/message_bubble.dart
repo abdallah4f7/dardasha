@@ -14,6 +14,7 @@ import '../services/api.dart';
 import '../services/download.dart';
 import '../services/link_preview.dart';
 import 'common.dart';
+import 'report_sheet.dart';
 import 'share_sheet.dart';
 
 const quickReactions = ['❤️', '😂', '😮', '😢', '👍', '🙏'];
@@ -152,6 +153,12 @@ class MessageBubble extends StatelessWidget {
                 title: Text(l.t('saveSticker')),
                 onTap: () => Navigator.pop(c, 'sticker'),
               ),
+            if (!mine && m.type != 'call')
+              ListTile(
+                leading: const Icon(Icons.flag_outlined),
+                title: Text(l.t('reportMessage')),
+                onTap: () => Navigator.pop(c, 'report'),
+              ),
             if (mine || canDeleteAny)
               ListTile(
                 leading: Icon(Icons.delete_outline, color: Theme.of(c).colorScheme.error),
@@ -202,6 +209,8 @@ class MessageBubble extends StatelessWidget {
         case 'sticker':
           await Api.saveSticker(m.mediaUrl!);
           if (context.mounted) toast(context, l.t('stickerSaved'));
+        case 'report':
+          await reportMessage(context, m);
         case 'delete':
           onDelete(m);
       }

@@ -13,6 +13,7 @@ import '../models.dart';
 import '../pages/call_page.dart';
 import '../widgets/call_bubble.dart';
 import 'api.dart';
+import 'camera_fx.dart';
 import 'push.dart';
 
 /// Most people in one call, the caller included. Everyone connects to everyone
@@ -311,6 +312,7 @@ class CallSession extends ChangeNotifier {
 
   MediaStream? _local; // microphone
   MediaStream? _camera;
+  MediaStream? _editedCamera; // browsers only, while a camera effect is on
   MediaStream? _screen;
   Future<void>? _setupDone;
   bool _started = false;
@@ -350,11 +352,13 @@ class CallSession extends ChangeNotifier {
   Future<void> _setup() => _setupDone ??= () async {
     await localRenderer.initialize();
     _local = await navigator.mediaDevices.getUserMedia({'audio': true, 'video': false});
+    await CameraFx.reset();
     if (video) {
       _camera = await navigator.mediaDevices.getUserMedia({
         'audio': false,
         'video': {'facingMode': 'user'},
       });
+      await CameraFx.attach(_cameraTrack?.id);
       localRenderer.srcObject = _camera;
     }
     await _applySpeaker();
@@ -366,7 +370,7 @@ class CallSession extends ChangeNotifier {
     await Helper.setSpeakerphoneOn(speaker);
   }
 
-  MediaStreamTrack? get _cameraTrack => _camera?.getVideoTracks().firstOrNull;
+  MediaStreamTrack? get _cameraTrack => (_editedCamera ?? _camera)?.getVideoTracks().firstOrNull;
 
   /// What our video slot carries right now: the shared screen, the camera, or nothing.
   MediaStreamTrack? get _videoTrack => _screen?.getVideoTracks().firstOrNull ?? _cameraTrack;
@@ -721,22 +725,51 @@ class CallSession extends ChangeNotifier {
     await s?.dispose();
   }
 
+  /// After the sliders move. Browsers send the edited stream only while an effect
+  /// is on, so a call without effects never goes through the canvas.
+  void applyCameraEffects() {
+    CameraFx.apply();
+    if (!kIsWeb || _camera == null || CameraFx.anyOn == (_editedCamera != null)) return;
+    _routeCamera();
+    _setVideoTrack(_cameraTrack);
+    localRenderer.srcObject = _editedCamera ?? _camera;
+    notifyListeners();
+  }
+
+  void _routeCamera() {
+    if (!kIsWeb) return;
+    if (CameraFx.anyOn) {
+      _editedCamera = CameraFx.startEditing(_camera!);
+    } else {
+      CameraFx.stopEditing();
+      _editedCamera = null;
+    }
+  }
+
+  Future<void> _stopCamera() async {
+    CameraFx.stopEditing();
+    _editedCamera = null;
+    await _stopStream(_camera);
+    _camera = null;
+    localRenderer.srcObject = null;
+  }
+
   Future<void> toggleCamera() async {
     if (!canShareVideo) return;
     if (cameraOn) {
       cameraOn = false;
       await _setVideoTrack(null);
-      await _stopStream(_camera);
-      _camera = null;
-      localRenderer.srcObject = null;
+      await _stopCamera();
     } else {
       if (sharingScreen) await _stopScreen(notify: false);
       _camera = await navigator.mediaDevices.getUserMedia({
         'audio': false,
         'video': {'facingMode': frontCamera ? 'user' : 'environment'},
       });
+      await CameraFx.attach(_cameraTrack?.id);
+      _routeCamera(); // the effects stay on across turning the camera off and on
       await _setVideoTrack(_cameraTrack);
-      localRenderer.srcObject = _camera;
+      localRenderer.srcObject = _editedCamera ?? _camera;
       cameraOn = true;
       if (!speaker) await toggleSpeaker();
     }
@@ -768,9 +801,7 @@ class CallSession extends ChangeNotifier {
       track.onEnded = () => _stopScreen();
       if (cameraOn) {
         cameraOn = false;
-        await _stopStream(_camera);
-        _camera = null;
-        localRenderer.srcObject = null;
+        await _stopCamera();
       }
       _screen = screen;
       await _setVideoTrack(track);
@@ -810,6 +841,7 @@ class CallSession extends ChangeNotifier {
     Push.cancelCall();
 
     _stopScreen(notify: false);
+    CameraFx.stopEditing();
     for (final s in [_local, _camera]) {
       _stopStream(s);
     }

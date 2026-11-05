@@ -13,6 +13,8 @@ import 'chat_page.dart';
 import 'friends_page.dart';
 import 'new_chat_page.dart';
 import 'profile_page.dart';
+import 'reports_page.dart';
+import 'status_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -26,14 +28,24 @@ class _HomePageState extends State<HomePage> {
   Map<String, Profile> _peers = {};
   Profile? _me;
   int _requests = 0;
+  int? _openReports; // null: not a moderator
+  int _myStatuses = 0;
+  List<StatusGroup> _statuses = [];
+  Set<String> _seenStatuses = {};
   RealtimeChannel? _channel;
   Timer? _debounce;
+  Timer? _statusTimer;
 
   @override
   void initState() {
     super.initState();
     _load();
-    WidgetsBinding.instance.addPostFrameCallback((_) => Updater.check(context));
+    // Other people's statuses reach no table this page can listen to.
+    _statusTimer = Timer.periodic(const Duration(minutes: 1), (_) => _loadStatuses());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Updater.check(context);
+      _showModerationNotice();
+    });
     _channel = db
         .channel('home:$myId')
         .onPostgresChanges(
@@ -62,6 +74,7 @@ class _HomePageState extends State<HomePage> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _statusTimer?.cancel();
     if (_channel != null) db.removeChannel(_channel!);
     super.dispose();
   }
@@ -73,22 +86,93 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _load() async {
     try {
-      final (rows, peers, me, requests) = await (
+      final (rows, peers, me, requests, openReports) = await (
         db.from('conversations').select().order('last_message_at', ascending: false).then((r) => r),
         Api.dmPeers(),
         Api.profile(myId),
         Api.pendingRequestCount(),
+        Api.openReportCount(),
       ).wait;
       if (!mounted) return;
       setState(() {
-        _convs = rows.map(Conversation.fromMap).toList();
+        _convs = rows.where((r) => r['is_status'] != true).map(Conversation.fromMap).toList();
         _peers = peers;
         _me = me;
         _requests = requests;
+        _openReports = openReports;
       });
+      await _loadStatuses();
     } catch (e) {
       if (mounted) showError(context, e);
     }
+  }
+
+  /// Quiet on failure: the chats are what matter, and it tries again soon.
+  Future<void> _loadStatuses() async {
+    try {
+      final (feed, mine) = await (Api.statusFeed(), Api.myStatusCount()).wait;
+      final seen = await StatusSeen.load(feed.map((m) => m.id));
+      final groups = <StatusGroup>[];
+      for (final items in sortStatuses(feed, seen)) {
+        final person = await Api.profile(items.first.senderId);
+        if (person != null) groups.add(StatusGroup(person, items));
+      }
+      if (!mounted) return;
+      setState(() {
+        _statuses = groups;
+        _myStatuses = mine;
+        _seenStatuses = seen;
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _openMyStatus() async {
+    final l = L.of(context);
+    try {
+      final id = await Api.myStatusConversation();
+      if (!mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ChatPage(
+            conversationId: id,
+            isGroup: false,
+            isStatus: true,
+            title: l.t('myStatus'),
+            avatarUrl: _me?.avatarUrl,
+          ),
+        ),
+      );
+      _loadStatuses();
+    } catch (e) {
+      if (mounted) showError(context, e);
+    }
+  }
+
+  Future<void> _openStatus(int index) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => StatusViewerPage(groups: _statuses, start: index, seen: {..._seenStatuses})),
+    );
+    _loadStatuses();
+  }
+
+  Future<void> _showModerationNotice() async {
+    final Map<String, dynamic>? notice;
+    try {
+      notice = await Api.takeModerationNotice();
+    } catch (_) {
+      return; // it stays unseen and comes up next time
+    }
+    if (notice == null || !mounted) return;
+    final l = L.of(context);
+    final reason = notice['reason'] as String?;
+    await showDialog<void>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text(l.t('messageRemoved')),
+        content: Text(reason == null ? l.t('messageRemovedBody') : '${l.t('reasonLabel')}: $reason'),
+        actions: [FilledButton(onPressed: () => Navigator.pop(c), child: Text(l.t('gotIt')))],
+      ),
+    );
   }
 
   void _open(Conversation c) {
@@ -106,6 +190,15 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Widget _statusStrip() => StatusStrip(
+    me: _me,
+    mineCount: _myStatuses,
+    groups: _statuses,
+    seen: _seenStatuses,
+    onMine: _openMyStatus,
+    onOpen: _openStatus,
+  );
+
   @override
   Widget build(BuildContext context) {
     final l = L.of(context);
@@ -114,6 +207,19 @@ class _HomePageState extends State<HomePage> {
       appBar: AppBar(
         title: Text(l.t('appName'), style: const TextStyle(fontWeight: FontWeight.bold)),
         actions: [
+          if (_openReports != null)
+            IconButton(
+              tooltip: l.t('reports'),
+              icon: Badge(
+                isLabelVisible: _openReports! > 0,
+                label: Text('$_openReports'),
+                child: const Icon(Icons.flag_outlined),
+              ),
+              onPressed: () async {
+                await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ReportsPage()));
+                _load();
+              },
+            ),
           IconButton(
             tooltip: l.t('addFriends'),
             icon: Badge(
@@ -153,13 +259,16 @@ class _HomePageState extends State<HomePage> {
               child: convs.isEmpty
                   ? ListView(
                       children: [
+                        _statusStrip(),
                         const SizedBox(height: 160),
                         Text(l.t('noChats'), textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodyLarge),
                       ],
                     )
                   : ListView.builder(
-                      itemCount: convs.length,
-                      itemBuilder: (_, i) {
+                      itemCount: convs.length + 1,
+                      itemBuilder: (_, index) {
+                        if (index == 0) return _statusStrip();
+                        final i = index - 1;
                         final c = convs[i];
                         final peer = _peers[c.id];
                         final title = c.isGroup ? (c.name ?? '') : (peer?.displayName ?? '…');
