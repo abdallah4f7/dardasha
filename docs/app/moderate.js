@@ -20,9 +20,11 @@ window.dardashaModerate = (() => {
   const EXPOSED_UNSURE = 0.06;
   const MIN_PERSON = 0.12; // of the picture's height; anyone smaller is too far away to show anything
   const MAX_PEOPLE = 5;
-  const MUSIC_SCORE = 0.3; // a second of sound counts as music above this
-  const MUSIC_SURE = 0.3; // share of the seconds that are music
-  const MUSIC_UNSURE = 0.1;
+  // A second of sound is music only with an instrument in it: YAMNet also calls
+  // Quran recitation "vocal music", "chant" or "classical music".
+  const MUSIC_SCORE = 0.3;
+  const INSTRUMENT_SCORE = 0.15;
+  const MUSIC_SURE = 0.4; // share of the seconds that are music; below it nothing is muted or asked
   const MIN_FACE = 18; // pixels; a smaller face is too far away to tell
   const PREVIEW = 640;
   const COUNT_SIZE = 320; // skin is counted on a picture this big
@@ -32,7 +34,8 @@ window.dardashaModerate = (() => {
   const VIDEO_SAMPLE_EVERY = 3; // seconds between the frames looked at before sending
   const SAMPLE_WIDTH = 640;
   const VIDEO_LOOK_EVERY = 0.5; // seconds; the frames in between reuse the last look, a little wider
-  const MUSIC_NAMES = /music|instrument|guitar|piano|drum|bass|synth|violin|fiddle|cello|orchestra|keyboard|trumpet|flute|saxophone|organ|ukulele|banjo|harp|accordion|cymbal|tabla|sitar|oud|zither|mandolin|harmonica|brass|string section|percussion|beat/i;
+  // Instruments, and kinds of music that are never a voice alone.
+  const INSTRUMENTS = /instrument|guitar|piano|drum|bass|synth|violin|fiddle|cello|orchestra|keyboard|trumpet|flute|saxophone|organ|ukulele|banjo|harp|accordion|cymbal|tabla|sitar|oud|zither|mandolin|harmonica|brass|string section|percussion|plucked|bowed|beat|pop music|rock|electronic|techno|house music|disco|dance music|hip hop|jazz|funk|reggae|heavy metal|trance|dubstep/i;
 
   const fx = window.DARDASHA_FX ?? new URL('fx/', document.baseURI).href;
   const sessions = new Map();
@@ -91,7 +94,7 @@ window.dardashaModerate = (() => {
     const { AudioClassifier } = await import(`${fx}audio_bundle.mjs`);
     return AudioClassifier.createFromOptions(
       { wasmLoaderPath: `${fx}audio_wasm_internal.js`, wasmBinaryPath: `${fx}audio_wasm_internal.wasm` },
-      { baseOptions: { modelAssetPath: `${fx}yamnet.tflite` }, maxResults: 8 },
+      { baseOptions: { modelAssetPath: `${fx}yamnet.tflite` }, maxResults: 15 },
     );
   });
 
@@ -431,7 +434,6 @@ window.dardashaModerate = (() => {
       unsure: !!d?.unsure || (!!d?.text?.trim() && !said && !words.has('none')),
       words,
       strokes: Array.isArray(d?.strokes) ? d.strokes : [],
-      mute: !!d?.unsure || words.has('mute'),
     };
   }
 
@@ -649,7 +651,6 @@ window.dardashaModerate = (() => {
 
     let music = 0;
     if (sound && (await sound.canDecode())) music = await musicShare(mb, sound, duration, (p) => progress?.(0.7 + 0.3 * p));
-    if (music >= MUSIC_UNSURE && music < MUSIC_SURE) reasons.add('music');
     const changes = womenFound || bareFound || music >= MUSIC_SURE;
 
     if (reasons.size > 0 && !previewUrl && track) {
@@ -685,7 +686,9 @@ window.dardashaModerate = (() => {
       for (const r of classifier.classify(data, rate)) {
         windows++;
         const top = r.classifications[0]?.categories ?? [];
-        if (top.some((c) => c.score >= MUSIC_SCORE && MUSIC_NAMES.test(c.categoryName))) musical++;
+        const music = top.find((c) => c.categoryName === 'Music')?.score ?? 0;
+        const instrument = Math.max(0, ...top.filter((c) => INSTRUMENTS.test(c.categoryName)).map((c) => c.score));
+        if (music >= MUSIC_SCORE && instrument >= INSTRUMENT_SCORE) musical++;
       }
     };
     for await (const sample of sink.samples()) {
@@ -712,7 +715,7 @@ window.dardashaModerate = (() => {
 
   async function finishVideo(s, d, progress) {
     const decision = readDecision(d);
-    const mute = s.music >= MUSIC_SURE || (s.music >= MUSIC_UNSURE && decision.mute);
+    const mute = s.music >= MUSIC_SURE || decision.words.has('mute');
     const blur = s.blurFound || decision.unsure || decision.strokes.length > 0
       || ['all', 'face', 'hair', 'women', 'awrah', 'skin', 'body'].some((p) => decision.words.has(p));
     if (!mute && !blur) return null;
