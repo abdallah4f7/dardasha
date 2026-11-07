@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../l10n.dart';
 import '../services/api.dart';
+import '../services/moderation.dart';
 
 void toast(BuildContext context, String text) {
   ScaffoldMessenger.of(context)
@@ -15,6 +16,7 @@ void showError(BuildContext context, Object e) {
   final l = L.of(context);
   final text = switch (e) {
     FileTooLarge() => l.t('tooLarge'),
+    CheckFailed() => l.t('checkFailed'),
     _ => '${l.t('error')}: ${e.toString().split('\n').first}',
   };
   toast(context, text);

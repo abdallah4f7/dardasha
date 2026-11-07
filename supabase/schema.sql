@@ -620,3 +620,60 @@ revoke execute on function public.status_feed() from anon, public;
 grant execute on function public.can_see_status(uuid) to authenticated;
 grant execute on function public.my_status() to authenticated;
 grant execute on function public.status_feed() to authenticated;
+
+-- ───────────── Photo and video reviews ─────────────
+-- The checks on the sender's phone (web/moderate.js) blur what they are sure
+-- of. What they aren't sure of comes here as a small preview, and a moderator
+-- has a few seconds to answer while the sender waits. A row lives only that
+-- long: the sender deletes it, and anything left behind is swept up.
+create table if not exists public.reviews (
+  id uuid primary key default gen_random_uuid(),
+  sender_id uuid not null default auth.uid() references public.profiles(id) on delete cascade,
+  conversation_id uuid not null references public.conversations(id) on delete cascade,
+  kind text not null check (kind in ('image', 'video')),
+  reasons text[] not null default '{}',
+  preview text not null check (length(preview) < 500000),
+  marks jsonb not null default '[]',
+  holding boolean not null default false, -- the moderator started answering: the sender waits longer
+  decision jsonb,
+  created_at timestamptz not null default now()
+);
+alter table public.reviews enable row level security;
+
+drop policy if exists "reviews_insert" on public.reviews;
+create policy "reviews_insert" on public.reviews for insert to authenticated
+  with check (sender_id = auth.uid() and public.is_member(conversation_id) and not public.is_banned(auth.uid()));
+drop policy if exists "reviews_read" on public.reviews;
+create policy "reviews_read" on public.reviews for select to authenticated
+  using (sender_id = auth.uid() or public.is_moderator());
+drop policy if exists "reviews_answer" on public.reviews;
+create policy "reviews_answer" on public.reviews for update to authenticated
+  using (public.is_moderator()) with check (public.is_moderator());
+drop policy if exists "reviews_delete" on public.reviews;
+create policy "reviews_delete" on public.reviews for delete to authenticated
+  using (sender_id = auth.uid() or public.is_moderator());
+-- A moderator answers; nothing else about a review changes.
+revoke update on public.reviews from anon, authenticated;
+grant update (holding, decision) on public.reviews to authenticated;
+
+-- What a sender who closed the app mid-wait left behind.
+create or replace function public.sweep_reviews() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  delete from reviews where created_at < now() - interval '10 minutes';
+  return null;
+end $$;
+revoke execute on function public.sweep_reviews() from anon, authenticated, public;
+drop trigger if exists sweep_reviews on public.reviews;
+create trigger sweep_reviews after insert on public.reviews
+  for each statement execute function public.sweep_reviews();
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'reviews'
+  ) then
+    alter publication supabase_realtime add table public.reviews;
+  end if;
+end $$;

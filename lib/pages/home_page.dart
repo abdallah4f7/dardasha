@@ -14,6 +14,7 @@ import 'friends_page.dart';
 import 'new_chat_page.dart';
 import 'profile_page.dart';
 import 'reports_page.dart';
+import 'review_page.dart';
 import 'status_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -76,6 +77,7 @@ class _HomePageState extends State<HomePage> {
     _debounce?.cancel();
     _statusTimer?.cancel();
     if (_channel != null) db.removeChannel(_channel!);
+    ReviewDesk.stop();
     super.dispose();
   }
 
@@ -101,6 +103,8 @@ class _HomePageState extends State<HomePage> {
         _requests = requests;
         _openReports = openReports;
       });
+      // Moderators review the photos and videos the checks weren't sure of.
+      if (openReports != null) ReviewDesk.start();
       await _loadStatuses();
     } catch (e) {
       if (mounted) showError(context, e);

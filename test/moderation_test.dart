@@ -1,45 +1,44 @@
-import 'package:chat/models.dart';
+import 'dart:ui';
+
+import 'package:chat/services/moderation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-Map<String, dynamic> _report() => {
-  'id': 'r1',
-  'reported_id': 'u2',
-  'message_type': 'text',
-  'message_content': 'hello',
-  'message_media_url': null,
-  'message_at': '2026-11-01T10:00:00Z',
-  'note': null,
-  'status': 'open',
-  'action': null,
-  'reason': null,
-  'reporter': null,
-  'reported': null,
-};
-
 void main() {
-  test('a ban without an end is permanent', () {
-    expect(Ban.fromMap({'until': null, 'reason': 'x'}).active, isTrue);
+  test('a check reads what moderate.js returns', () {
+    final c = Check.fromMap({
+      'id': 3,
+      'kind': 'image',
+      'reasons': ['gender'],
+      'marks': [
+        {'x': 0.1, 'y': 0.2, 'w': 0.3, 'h': 0.4, 'kind': 'gender', 'sure': false},
+      ],
+      'changes': true,
+      'preview': 'data:image/jpeg;base64,AAAA',
+    });
+    expect(c.id, 3);
+    expect(c.reasons, ['gender']);
+    expect(c.marks.single.rect, const Rect.fromLTWH(0.1, 0.2, 0.3, 0.4));
+    expect(c.marks.single.sure, isFalse);
+    expect(c.marks.single.toMap()['kind'], 'gender');
   });
 
-  test('a temporary ban ends', () {
-    final later = DateTime.now().toUtc().add(const Duration(hours: 1)).toIso8601String();
-    final earlier = DateTime.now().toUtc().subtract(const Duration(hours: 1)).toIso8601String();
-    expect(Ban.fromMap({'until': later}).active, isTrue);
-    expect(Ban.fromMap({'until': earlier}).active, isFalse);
+  test('a decision survives the trip through the database', () {
+    const d = Decision(
+      unsure: true,
+      text: 'الوجه والشعر',
+      strokes: [(width: 0.06, points: [0.1, 0.2, 0.3, 0.4])],
+    );
+    final back = Decision.fromMap(d.toMap());
+    expect(back.unsure, isTrue);
+    expect(back.text, 'الوجه والشعر');
+    expect(back.strokes.single.width, 0.06);
+    expect(back.strokes.single.points, [0.1, 0.2, 0.3, 0.4]);
   });
 
-  test('a report without a note or decision reads as open', () {
-    final r = Report.fromMap(_report());
-    expect(r.open, isTrue);
-    expect(r.note, isNull);
-    expect(r.action, isNull);
-    expect(r.reporter, isNull);
-  });
-
-  test('a handled report keeps its decision', () {
-    final r = Report.fromMap({..._report(), 'status': 'resolved', 'action': 'temp_ban', 'reason': 'spam'});
-    expect(r.open, isFalse);
-    expect(r.action, 'temp_ban');
-    expect(r.reason, 'spam');
+  test('an empty answer blurs only what was sure', () {
+    final d = Decision.fromMap({});
+    expect(d.unsure, isFalse);
+    expect(d.text, isEmpty);
+    expect(d.strokes, isEmpty);
   });
 }

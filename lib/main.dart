@@ -16,6 +16,7 @@ import 'pages/complete_profile_page.dart';
 import 'pages/home_page.dart';
 import 'services/api.dart';
 import 'services/calls.dart';
+import 'services/moderation.dart';
 import 'services/push.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
@@ -28,6 +29,7 @@ Future<void> main() async {
   if (kIsWeb) await BrowserContextMenu.disableContextMenu();
   await Supabase.initialize(url: supabaseUrl, publishableKey: supabasePublishableKey);
   CallService.instance.navigatorKey = navigatorKey;
+  Moderation.navigatorKey = navigatorKey;
   await Push.init(navigatorKey);
   runApp(const ChatApp());
 }

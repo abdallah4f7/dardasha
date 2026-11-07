@@ -17,6 +17,7 @@ import '../l10n.dart';
 import '../models.dart';
 import '../services/api.dart';
 import '../services/calls.dart';
+import '../services/moderation.dart';
 import '../services/push.dart';
 import '../widgets/avatar.dart';
 import '../widgets/common.dart';
@@ -89,6 +90,11 @@ class _ChatPageState extends State<ChatPage> {
   late String? _avatarUrl = widget.avatarUrl;
   Profile? _peer;
   int _uploads = 0;
+
+  /// How far the check of a photo or video is (0–1), or null when none is
+  /// being checked. See [_checked].
+  double? _checking;
+  bool _waitingForOwner = false;
 
   bool _recording = false;
   bool _cancelRecording = false;
@@ -256,11 +262,44 @@ class _ChatPageState extends State<ChatPage> {
     });
   }
 
+  /// Photos and videos are checked before they go (see Moderation): [name] and
+  /// [bytes] come back changed when something was blurred or muted.
+  Future<(String, Uint8List)> _checked(String name, Uint8List bytes) async {
+    final type = contentTypeFor(name);
+    final kind = type.startsWith('image/') ? 'image' : (type.startsWith('video/') ? 'video' : null);
+    if (kind == null) return (name, bytes);
+    setState(() => _checking = 0);
+    try {
+      final changed = await Moderation.check(
+        bytes,
+        kind: kind,
+        conversationId: widget.conversationId,
+        onProgress: (p) {
+          if (!mounted) return;
+          setState(() {
+            _waitingForOwner = p == null;
+            _checking = p ?? _checking;
+          });
+        },
+      );
+      if (changed == null) return (name, bytes);
+      final base = name.contains('.') ? name.substring(0, name.lastIndexOf('.')) : name;
+      return ('$base.${kind == 'image' ? 'jpg' : 'mp4'}', changed);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _checking = null;
+          _waitingForOwner = false;
+        });
+      }
+    }
+  }
+
   Future<void> _sendImage(XFile x, [Map<String, dynamic> reply = const {}]) => _guard(() async {
-    final bytes = await x.readAsBytes();
+    final (name, bytes) = await _checked(x.name.contains('.') ? x.name : '${x.name}.jpg', await x.readAsBytes());
     final img = await decodeImageFromList(bytes);
-    final ext = x.name.contains('.') ? x.name.split('.').last.toLowerCase() : 'jpg';
-    final url = await Api.upload(bytes, ext, contentTypeFor(x.name));
+    final ext = name.split('.').last.toLowerCase();
+    final url = await Api.upload(bytes, ext, contentTypeFor(name));
     await Api.send(
       widget.conversationId,
       type: 'image',
@@ -270,20 +309,20 @@ class _ChatPageState extends State<ChatPage> {
   });
 
   Future<void> _sendVideo(XFile x, [Map<String, dynamic> reply = const {}]) => _guard(() async {
-    final bytes = await x.readAsBytes();
-    final ext = x.name.contains('.') ? x.name.split('.').last.toLowerCase() : 'mp4';
-    final url = await Api.upload(bytes, ext, contentTypeFor(x.name));
+    final (name, bytes) = await _checked(x.name.contains('.') ? x.name : '${x.name}.mp4', await x.readAsBytes());
+    final ext = name.split('.').last.toLowerCase();
+    final url = await Api.upload(bytes, ext, contentTypeFor(name));
     await Api.send(widget.conversationId, type: 'video', mediaUrl: url, meta: reply);
   });
 
   Future<void> _sendFile(PlatformFile f, [Map<String, dynamic> reply = const {}]) => _guard(() async {
-    final bytes = await f.readAsBytes();
-    final ext = f.extension?.toLowerCase() ?? 'bin';
-    final url = await Api.upload(bytes, ext, contentTypeFor(f.name));
+    final (name, bytes) = await _checked(f.name, await f.readAsBytes());
+    final ext = name.contains('.') ? name.split('.').last.toLowerCase() : 'bin';
+    final url = await Api.upload(bytes, ext, contentTypeFor(name));
     await Api.send(
       widget.conversationId,
       type: 'file',
-      content: f.name,
+      content: name,
       mediaUrl: url,
       meta: {...reply, 'size': bytes.length},
     );
@@ -494,6 +533,27 @@ class _ChatPageState extends State<ChatPage> {
     CallService.instance.call(context, peer, video: video, conversationId: widget.conversationId);
   }
 
+  /// "Sending…" with how far the check is, or that the checks are downloading the first time.
+  Widget _sendingNote(L l, ColorScheme scheme) => ValueListenableBuilder<double?>(
+    valueListenable: Moderation.preparing,
+    builder: (context, preparing, _) {
+      final pct = ((preparing ?? _checking ?? 0) * 100).round();
+      final text = preparing != null
+          ? '${l.t('preparingChecks')} $pct%'
+          : (_waitingForOwner || pct == 0 ? l.t('sending') : '${l.t('sending')} $pct%');
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+        child: Row(
+          children: [
+            const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+            const SizedBox(width: 10),
+            Expanded(child: Text(text, style: TextStyle(fontSize: 13, color: scheme.outline))),
+          ],
+        ),
+      );
+    },
+  );
+
   @override
   Widget build(BuildContext context) {
     final l = L.of(context);
@@ -539,16 +599,15 @@ class _ChatPageState extends State<ChatPage> {
           ),
         ),
         actions: [
-          if (widget.isStatus)
-            const SizedBox.shrink()
-          else if (!widget.isGroup) ...[
+          if (!widget.isStatus) ...[
             IconButton(
               tooltip: l.t('videoCall'),
               icon: const Icon(Icons.videocam_outlined),
               onPressed: () => _call(true),
             ),
             IconButton(tooltip: l.t('voiceCall'), icon: const Icon(Icons.call_outlined), onPressed: () => _call(false)),
-          ] else
+          ],
+          if (widget.isGroup)
             IconButton(
               icon: const Icon(Icons.info_outline),
               onPressed: _openGroupInfo,
@@ -636,6 +695,7 @@ class _ChatPageState extends State<ChatPage> {
               onClose: () => setState(() => _replyTo = null),
             ),
           if (_uploads > 0) LinearProgressIndicator(minHeight: 2, backgroundColor: scheme.surfaceContainerHighest),
+          if (_checking != null) _sendingNote(l, scheme),
           SafeArea(
             top: false,
             child: _locked
