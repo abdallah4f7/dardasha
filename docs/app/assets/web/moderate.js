@@ -20,11 +20,14 @@ window.dardashaModerate = (() => {
   const EXPOSED_UNSURE = 0.06;
   const MIN_PERSON = 0.12; // of the picture's height; anyone smaller is too far away to show anything
   const MAX_PEOPLE = 5;
-  // A second of sound is music only with an instrument in it: YAMNet also calls
-  // Quran recitation "vocal music", "chant" or "classical music".
-  const MUSIC_SCORE = 0.3;
-  const INSTRUMENT_SCORE = 0.15;
-  const MUSIC_SURE = 0.4; // share of the seconds that are music; below it nothing is muted or asked
+  // YAMNet hears a song as "Music" around 0.9, and Quran recitation or the adhan
+  // as speech and chant with "Music" under 0.1. A second is music when "Music"
+  // is strong and beats any voice, unless all it has is percussion: a nasheed
+  // with a daf stays.
+  const MUSIC_SCORE = 0.5;
+  const PERCUSSION_SCORE = 0.15;
+  const MELODY_SCORE = 0.1;
+  const MUSIC_SURE = 0.3; // share of the seconds that are music; below it nothing is muted
   const MIN_FACE = 18; // pixels; a smaller face is too far away to tell
   const PREVIEW = 640;
   const COUNT_SIZE = 320; // skin is counted on a picture this big
@@ -34,8 +37,10 @@ window.dardashaModerate = (() => {
   const VIDEO_SAMPLE_EVERY = 3; // seconds between the frames looked at before sending
   const SAMPLE_WIDTH = 640;
   const VIDEO_LOOK_EVERY = 0.5; // seconds; the frames in between reuse the last look, a little wider
-  // Instruments, and kinds of music that are never a voice alone.
-  const INSTRUMENTS = /instrument|guitar|piano|drum|bass|synth|violin|fiddle|cello|orchestra|keyboard|trumpet|flute|saxophone|organ|ukulele|banjo|harp|accordion|cymbal|tabla|sitar|oud|zither|mandolin|harmonica|brass|string section|percussion|plucked|bowed|beat|pop music|rock|electronic|techno|house music|disco|dance music|hip hop|jazz|funk|reggae|heavy metal|trance|dubstep/i;
+  const VOICE = /^(Speech|Chant|Mantra|Narration, monologue)$/;
+  const PERCUSSION = /drum|percussion|tabla|wood block|cymbal|tambourine|rimshot|snare|cowbell|clapping|hi-hat|timpani|gong/i;
+  // Instruments with a tune, and kinds of music that always have one.
+  const MELODY = /guitar|piano|keyboard|synth|organ|violin|fiddle|cello|orchestra|string|brass|trumpet|trombone|horn|flute|saxophone|clarinet|harp|accordion|sitar|oud|zither|mandolin|banjo|ukulele|harmonica|marimba|xylophone|bell|pop music|rock|electronic|techno|house music|disco|dance music|hip hop|jazz|funk|reggae|heavy metal|trance|dubstep|rhythm and blues/i;
 
   const fx = window.DARDASHA_FX ?? new URL('fx/', document.baseURI).href;
   const sessions = new Map();
@@ -94,7 +99,7 @@ window.dardashaModerate = (() => {
     const { AudioClassifier } = await import(`${fx}audio_bundle.mjs`);
     return AudioClassifier.createFromOptions(
       { wasmLoaderPath: `${fx}audio_wasm_internal.js`, wasmBinaryPath: `${fx}audio_wasm_internal.wasm` },
-      { baseOptions: { modelAssetPath: `${fx}yamnet.tflite` }, maxResults: 15 },
+      { baseOptions: { modelAssetPath: `${fx}yamnet.tflite` }, maxResults: 25 },
     );
   });
 
@@ -443,7 +448,7 @@ window.dardashaModerate = (() => {
     const { words } = decision;
     for (const p of people) {
       const woman = p.female != null && (
-        p.female >= femaleAt || (p.female >= p.femaleFloor && (decision.unsure || words.has('women'))));
+        p.female >= Math.max(femaleAt, p.femaleFloor) || (p.female >= p.femaleFloor && (decision.unsure || words.has('women'))));
       const bare = p.exposed != null && (
         p.exposed >= exposedAt || (p.exposed >= EXPOSED_UNSURE && (decision.unsure || words.has('awrah'))));
       if (p.head && (woman || words.has('face') || words.has('hair'))) plan.heads.push(p.head);
@@ -686,9 +691,10 @@ window.dardashaModerate = (() => {
       for (const r of classifier.classify(data, rate)) {
         windows++;
         const top = r.classifications[0]?.categories ?? [];
+        const best = (re) => Math.max(0, ...top.filter((c) => re.test(c.categoryName)).map((c) => c.score));
         const music = top.find((c) => c.categoryName === 'Music')?.score ?? 0;
-        const instrument = Math.max(0, ...top.filter((c) => INSTRUMENTS.test(c.categoryName)).map((c) => c.score));
-        if (music >= MUSIC_SCORE && instrument >= INSTRUMENT_SCORE) musical++;
+        const drumsOnly = best(PERCUSSION) >= PERCUSSION_SCORE && best(MELODY) < MELODY_SCORE;
+        if (music >= MUSIC_SCORE && music > best(VOICE) && !drumsOnly) musical++;
       }
     };
     for await (const sample of sink.samples()) {
